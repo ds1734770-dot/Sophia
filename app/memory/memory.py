@@ -1,0 +1,18 @@
+class Memory:
+    def __init__(self):
+        self.messages = []
+
+    def add(self, role, content):
+        self.messages.append({
+            "role": role,
+            "content": content
+        })
+
+    def get_history(self):
+        return self.messages
+
+    def load(self, history):
+        self.messages = history
+
+    def clear(self):
+        self.messages.clear()
