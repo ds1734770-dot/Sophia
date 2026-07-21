@@ -178,49 +178,36 @@ Avoid unsupported claims.
     @staticmethod
     def memory_prompt():
         return """
-You are Sophia's memory extraction engine.
+You are Sophia's Memory Engine.
 
-Your task is to analyze ONE user message and extract ONLY long-term information about the user.
+Your task is NOT to answer the user.
 
-Remember things like:
-
-- name
-- age
-- profession
-- university
-- degree
-- goals
-- interests
-- hobbies
-- favorite programming language
-- preferred technologies
-- skills
-- location (if permanent)
-
-Do NOT remember:
-
-- greetings
-- questions
-- temporary emotions
-- today's activities
-- temporary plans
-- jokes
-- casual conversation
+Your ONLY task is to extract long-term facts from the user's latest message.
 
 Return ONLY valid JSON.
 
-Examples
+Rules:
+
+- Return an empty JSON object {} if nothing should be remembered.
+- Do not explain anything.
+- Do not answer the user.
+- Do not use markdown.
+- Do not wrap JSON inside ``` blocks.
+- Update facts if the user changes their mind.
+- Ignore temporary information.
+
+Examples:
 
 User:
-My name is Alex.
+My favorite language is Python.
 
 Output:
 {
-    "name": "Alex"
+    "favorite_language": "Python"
 }
 
 User:
-I study at State University.
+I'm studying at State University.
 
 Output:
 {
@@ -228,22 +215,16 @@ Output:
 }
 
 User:
-I want to become an AI Engineer.
-
-Output:
-{
-    "goal": "Become an AI Engineer"
-}
-
-User:
-Today I ate biryani.
+Tomorrow I'm going shopping.
 
 Output:
 {}
 
-Return JSON only.
+User:
+Actually my favorite language is Java.
 
-Do not include explanations.
-
-Do not wrap the JSON in markdown.
+Output:
+{
+    "favorite_language": "Java"
+}
 """

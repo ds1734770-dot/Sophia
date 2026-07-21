@@ -7,7 +7,7 @@ from app.memory.memory_storage import MemoryStorage
 from app.memory.user_profile import UserProfile
 from app.memory.profile_storage import ProfileStorage
 
-from app.memory.memory_extractor import MemoryExtractor
+
 
 from app.context.context_builder import ContextBuilder
 
@@ -65,7 +65,9 @@ class Sophia:
             self.brain.extract_memory(user_input)
         """
 
-        facts = MemoryExtractor.extract(user_input)
+        facts = self.brain.extract_memory(
+            user_input
+        )
 
         for key, value in facts.items():
             self.profile.set(key, value)

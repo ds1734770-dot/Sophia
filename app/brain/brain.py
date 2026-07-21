@@ -1,47 +1,21 @@
-import json
-
-from google import genai
-from google.genai import types
-
-from app.config.settings import Settings
-from app.adapters.gemini_adapter import GeminiAdapter
+from app.brain.engines.chat_engine import ChatEngine
+from app.brain.engines.memory_engine import MemoryEngine
 
 
 class Brain:
 
     def __init__(self):
-        self.settings = Settings()
 
-        self.client = genai.Client(
-            api_key=self.settings.gemini_api_key
-        )
-
-    def _generate(self, conversation, system_instruction):
-        """
-        Internal helper for communicating with Gemini.
-        """
-
-        gemini_history = GeminiAdapter.convert(conversation)
-
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction
-        )
-
-        response = self.client.models.generate_content(
-            model=self.settings.model_name,
-            contents=gemini_history,
-            config=config,
-        )
-
-        return response.text
+        self.chat_engine = ChatEngine()
+        self.memory_engine = MemoryEngine()
 
     def chat(self, conversation, system_instruction):
         """
-        Normal conversation with Sophia.
+        Generate Sophia's reply.
         """
 
         try:
-            return self._generate(
+            return self.chat_engine.chat(
                 conversation,
                 system_instruction
             )
@@ -51,7 +25,14 @@ class Brain:
 
     def extract_memory(self, user_message):
         """
-        Extract long-term memory.
+        Extract long-term user information.
         """
 
-        pass
+        try:
+            return self.memory_engine.extract(
+                user_message
+            )
+
+        except Exception as e:
+            print(f"Memory Extraction Error: {e}")
+            return {}
