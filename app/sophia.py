@@ -7,14 +7,17 @@ from app.memory.memory_storage import MemoryStorage
 from app.memory.user_profile import UserProfile
 from app.memory.profile_storage import ProfileStorage
 
-
+from app.memory.conversation_summary import ConversationSummary
+from app.memory.summary_storage import SummaryStorage
 
 from app.context.context_builder import ContextBuilder
 
+from app.memory.memory_filter import MemoryFilter
 
 class Sophia:
 
     def __init__(self):
+
         self.settings = Settings()
         self.brain = Brain()
 
@@ -30,7 +33,14 @@ class Sophia:
             ProfileStorage.load()
         )
 
+        # Conversation Summary
+        self.summary = ConversationSummary()
+        self.summary.set(
+            SummaryStorage.load()
+        )
+
     def start(self):
+
         print("=" * 50)
         print(f"🤖 {self.settings.app_name}")
         print(f"Version: {self.settings.version}")
@@ -39,10 +49,9 @@ class Sophia:
 
     def process_user_message(self, user_input):
         """
-        Save the user's message and update long-term memory.
+        Save the user's message.
         """
 
-        # Save conversation
         self.memory.add(
             "user",
             user_input
@@ -52,46 +61,50 @@ class Sophia:
             self.memory.get_history()
         )
 
-        # Update long-term profile
-        self.update_profile(user_input)
-
     def update_profile(self, user_input):
         """
-        Extract important user facts and save them.
-
-        NOTE:
-        This currently uses the rule-based MemoryExtractor.
-        Later we will replace it with:
-            self.brain.extract_memory(user_input)
+        Extract important user facts.
+        This should NEVER interrupt Sophia.
         """
 
-        facts = self.brain.extract_memory(
-            user_input
-        )
+        try:
 
-        for key, value in facts.items():
-            self.profile.set(key, value)
+            facts = self.brain.extract_memory(
+                user_input
+            )
 
-        ProfileStorage.save(
-            self.profile.get_all()
-        )
+            if not facts:
+                return
+
+            for key, value in facts.items():
+                self.profile.set(
+                    key,
+                    value
+                )
+
+            ProfileStorage.save(
+                self.profile.get_all()
+            )
+
+        except Exception as e:
+
+            print(f"[Memory] {e}")
 
     def generate_response(self):
         """
-        Build Sophia's context and generate a response.
+        Build Sophia's complete context and generate a response.
         """
 
-        context = ContextBuilder.build(
+        conversation = ContextBuilder.build(
             profile=self.profile.get_all(),
+            summary=self.summary.get(),
             history=self.memory.get_history()
         )
 
-        response = self.brain.chat(
-            conversation=context["conversation"],
-            system_instruction=context["system_prompt"]
+        return self.brain.chat(
+            conversation=conversation,
+            system_instruction=""
         )
-
-        return response
 
     def process_assistant_response(self, response):
         """
@@ -114,17 +127,27 @@ class Sophia:
             user_input = input("\nYou: ")
 
             if user_input.lower() in ["exit", "quit"]:
+
                 print(f"\n{self.settings.app_name}: Goodbye! 👋")
+
                 break
 
-            # Process user message
-            self.process_user_message(user_input)
+            # Save user message
+            self.process_user_message(
+                user_input
+            )
 
             # Generate response
-            response = self.generate_response()
+            result = self.generate_response()
 
-            # Save Sophia's response
-            self.process_assistant_response(response)
-
-            # Display response
+            response = result["response"]
+            
+            tool_used = result["tool_used"]
+            
             print(f"\n{self.settings.app_name}: {response}")
+            
+            self.process_assistant_response(response)
+            
+            # Only extract memory if NO tool was used
+            if (not tool_used) and result["chat_success"]:
+                self.update_profile(user_input)

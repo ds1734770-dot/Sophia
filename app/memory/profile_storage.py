@@ -1,10 +1,11 @@
 import json
 import os
+from app.settings.paths import PROFILE_FILE
 
 
 class ProfileStorage:
 
-    FILE_NAME = "profile.json"
+    FILE_NAME = PROFILE_FILE
 
     @staticmethod
     def load():

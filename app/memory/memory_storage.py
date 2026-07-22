@@ -1,10 +1,11 @@
 import json
 import os
+from app.settings.paths import MEMORY_FILE
 
 
 class MemoryStorage:
 
-    FILE_NAME = "memory.json"
+    FILE_NAME = MEMORY_FILE
 
     @staticmethod
     def load():

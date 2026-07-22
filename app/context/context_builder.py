@@ -1,16 +1,41 @@
 from app.prompts.prompt_manager import PromptManager
-from app.conversation.conversation_builder import ConversationBuilder
 
 
 class ContextBuilder:
 
+    MAX_HISTORY = 15
+
     @staticmethod
-    def build(profile, history):
+    def build(profile, summary, history):
+        """
+        Build the complete context for Sophia.
+        """
 
-        conversation = ConversationBuilder.build(history)
+        conversation = []
 
-        return {
-            "system_prompt": PromptManager.chat_prompt(),
-            "profile": profile,
-            "conversation": conversation,
-        }
+        # System Prompt
+        conversation.append({
+            "role": "system",
+            "content": PromptManager.chat_prompt()
+        })
+
+        # User Profile
+        if profile:
+            conversation.append({
+                "role": "system",
+                "content": f"User Profile:\n{profile}"
+            })
+
+        # Conversation Summary
+        if summary:
+            conversation.append({
+                "role": "system",
+                "content": f"Conversation Summary:\n{summary}"
+            })
+
+        # Only keep the most recent messages
+        conversation.extend(
+            history[-ContextBuilder.MAX_HISTORY:]
+        )
+
+        return conversation
