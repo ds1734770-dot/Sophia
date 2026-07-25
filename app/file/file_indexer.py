@@ -126,3 +126,28 @@ class FileIndexer:
         ) as f:
 
             return json.load(f)
+
+    def search(self, query):
+
+        query = query.lower().strip()
+    
+        files = self.load()
+    
+        results = []
+    
+        for file in files:
+        
+            filename = file["name"].lower()
+    
+            # Exact match gets highest priority
+            if filename == query:
+                results.insert(0, file)
+    
+            # Partial match
+            elif query in filename:
+                results.append(file)
+    
+        if not results:
+            return False, "No matching files found."
+    
+        return True, results

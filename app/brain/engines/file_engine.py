@@ -40,6 +40,40 @@ class FileEngine:
                 "handled": True,
                 "response": response,
             }
+        if command.lower().startswith("find "):
+
+            query = command[5:].strip()
+        
+            if not query:
+            
+                return {
+                    "handled": True,
+                    "response": "Please specify what to search for."
+                }
+        
+            success, results = self.indexer.search(query)
+        
+            if not success:
+            
+                return {
+                    "handled": True,
+                    "response": results,
+                }
+        
+            response = []
+        
+            for file in results[:10]:
+            
+                response.append(
+                    f"{file['type'].title()}: {file['name']}\n{file['path']}"
+                )
+        
+            return {
+                "handled": True,
+                "response": "\n\n".join(response),
+            }
+
+        
 
         return {
             "handled": False,
