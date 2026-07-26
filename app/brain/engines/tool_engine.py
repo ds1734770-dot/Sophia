@@ -23,11 +23,11 @@ class ToolEngine:
 
         ]
 
-    def process(self, command):
+    def process(self, command, context):
 
         for engine in self.engines:
 
-            result = engine.execute(command)
+            result = engine.execute(command, context)
 
             if result["handled"]:
                 return result

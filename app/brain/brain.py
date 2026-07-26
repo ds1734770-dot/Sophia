@@ -1,5 +1,8 @@
+
+
 from app.brain.engines.chat_engine import ChatEngine
 from app.brain.engines.memory_engine import MemoryEngine
+from app.brain.engines.pending_action_engine import PendingActionEngine
 from app.brain.engines.tool_engine import ToolEngine
 from app.brain.brain_response import BrainResponse
 
@@ -10,8 +13,9 @@ class Brain:
         self.chat_engine = ChatEngine()
         self.memory_engine = MemoryEngine()
         self.tool_engine = ToolEngine()
+        self.pending_engine = PendingActionEngine()
 
-    def chat(self, conversation, system_instruction):
+    def chat(self, conversation, system_instruction, context):
         """
         Generate Sophia's reply.
         """
@@ -20,16 +24,23 @@ class Brain:
         
             last_message = conversation[-1]["content"]
     
-            tool_result = self.tool_engine.process(
-                last_message
+            pending_result = self.pending_engine.process(
+                last_message,
+                context
             )
+
+            if pending_result["handled"]:
+                return pending_result
+
+            tool_result = self.tool_engine.process(last_message,context)
     
             if tool_result["handled"]:
-            
+
                 return {
                     "response": tool_result["response"],
                     "tool_used": True,
-                }
+                    "chat_success": False,
+            }
     
             chat_result = self.chat_engine.chat(conversation,system_instruction)
 
@@ -40,11 +51,12 @@ class Brain:
             }
                 
         except Exception as e:
-        
+
             return {
-                "response": f"Error: {e}",
-                "tool_used": False,
-            }
+        "response": f"Error: {e}",
+        "tool_used": False,
+        "chat_success": False,
+    }
 
     def extract_memory(self, user_message):
         """

@@ -15,6 +15,8 @@ MEMORY_FILE = DATA_DIR / "memories.json"
 
 FILE_DATABASE = DATA_DIR / "file_database.json"
 
+APPLICATION_DATABASE = DATA_DIR / "applications.json"
+
 # ------------------------
 # Future
 # ------------------------

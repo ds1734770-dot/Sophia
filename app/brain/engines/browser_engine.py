@@ -6,7 +6,7 @@ class BrowserEngine:
     def __init__(self):
         self.browser = BrowserManager()
 
-    def execute(self, command):
+    def execute(self, command, context):
 
         command = command.lower().strip()
 

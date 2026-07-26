@@ -1,11 +1,12 @@
-from app.file.file_indexer import FileIndexer
+from app.computer.application_indexer import ApplicationIndexer
 
-indexer = FileIndexer()
+indexer = ApplicationIndexer()
 
-count = indexer.save()
+while True:
 
-print(f"Indexed {count} items.")
+    query = input("Search: ")
 
-database = indexer.load()
+    success, result = indexer.search(query)
 
-print(database[:5])
+    print(success)
+    print(result)

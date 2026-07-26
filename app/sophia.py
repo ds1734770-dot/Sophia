@@ -1,3 +1,6 @@
+from multiprocessing import context
+
+from app.brain.tool_context import ToolContext
 from app.config.settings import Settings
 from app.brain.brain import Brain
 
@@ -13,6 +16,8 @@ from app.memory.summary_storage import SummaryStorage
 from app.context.context_builder import ContextBuilder
 
 from app.memory.memory_filter import MemoryFilter
+
+from app.actions.pending_action_manager import PendingActionManager
 
 class Sophia:
 
@@ -38,6 +43,8 @@ class Sophia:
         self.summary.set(
             SummaryStorage.load()
         )
+        self.pending_actions = PendingActionManager()
+
 
     def start(self):
 
@@ -101,9 +108,20 @@ class Sophia:
             history=self.memory.get_history()
         )
 
+        context = ToolContext()
+
+        context.pending_actions = self.pending_actions
+        context.memory = self.memory
+        context.profile = self.profile
+        context.settings = self.settings
+
+        context.file_manager = self.brain.tool_engine.engines[-1].file_manager
+        context.file_indexer = self.brain.tool_engine.engines[-1].indexer
+        
         return self.brain.chat(
             conversation=conversation,
-            system_instruction=""
+            system_instruction="",
+            context=context
         )
 
     def process_assistant_response(self, response):

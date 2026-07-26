@@ -1,3 +1,7 @@
+
+
+
+
 from app.computer.computer_manager import ComputerManager
 
 
@@ -7,7 +11,7 @@ class ComputerEngine:
     def __init__(self):
         self.computer = ComputerManager()
 
-    def execute(self, command):
+    def execute(self, command,context):
 
         command = command.lower().strip()
 
@@ -35,6 +39,11 @@ class ComputerEngine:
                     "response": response,
                 }
 
+            return {
+                "handled": False,
+                "response": None,
+            }
+
         # ----------------------------
         # Close Applications
         # ----------------------------
@@ -50,6 +59,19 @@ class ComputerEngine:
                     "handled": True,
                     "response": response,
                 }
+
+            success, response = self.computer.close_folder(target)
+
+            if success:
+                return {
+                    "handled": True,
+                    "response": response,
+                }
+
+            return {
+                "handled": False,
+                "response": None,
+            }
 
         # ----------------------------
         # Lock Computer

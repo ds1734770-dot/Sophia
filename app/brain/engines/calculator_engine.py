@@ -3,7 +3,7 @@ import re
 
 class CalculatorEngine:
 
-    def execute(self, command):
+    def execute(self, command, context):
 
         command = command.strip()
 
