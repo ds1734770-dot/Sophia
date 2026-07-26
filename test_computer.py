@@ -1,12 +1,7 @@
 from app.computer.application_indexer import ApplicationIndexer
 
-indexer = ApplicationIndexer()
+apps = ApplicationIndexer().load()
 
-while True:
-
-    query = input("Search: ")
-
-    success, result = indexer.search(query)
-
-    print(success)
-    print(result)
+for app in apps:
+    if "trading" in app["name"].lower():
+        print(app)

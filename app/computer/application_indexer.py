@@ -44,8 +44,9 @@ class ApplicationIndexer:
 
                 applications.append({
                     "name": shortcut.stem,
-                    "aliases": self.normalizer.aliases(shortcut.stem),
-                    "shortcut": str(shortcut)
+                    "aliases": self.normalizer.aliases(shortcut.stem) or [],
+                    "shortcut": str(shortcut),
+                    "type": "shortcut"
                 })
 
         return applications
@@ -90,30 +91,30 @@ class ApplicationIndexer:
 
     # ----------------------------
 
-    def search(self, name):
+    # def search(self, name):
 
-        applications = self.load()
+    #     applications = self.load()
 
-        name = name.lower().strip()
+    #     name = name.lower().strip()
 
-        results = []
+    #     results = []
 
-        # Exact Match
-        for app in applications:
+    #     # Exact Match
+    #     for app in applications:
 
-            if app["name"].lower() == name:
+    #         if app["name"].lower() == name:
 
-                return True, [app]
+    #             return True, [app]
 
-        # Partial Match
-        for app in applications:
+    #     # Partial Match
+    #     for app in applications:
 
-            if name in app["name"].lower():
+    #         if name in app["name"].lower():
 
-                results.append(app)
+    #             results.append(app)
 
-        if results:
+    #     if results:
 
-            return True, results
+    #         return True, results
 
-        return False, "No matching applications found."
+    #     return False, "No matching applications found."

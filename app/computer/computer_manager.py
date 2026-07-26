@@ -6,6 +6,7 @@ from pathlib import Path
 from app.computer.windows_folders import WindowsFolders
 from app.computer.explorer_window_manager import ExplorerWindowManager
 from app.computer.windows_system_manager import WindowsSystemManager
+from app.computer.application_manager import ApplicationManager
 
 
 class ComputerManager:
@@ -14,6 +15,7 @@ class ComputerManager:
 
         self.explorer = ExplorerWindowManager()
         self.windows = WindowsSystemManager()
+        self.app_manager = ApplicationManager()
 
     APPS = {
         "chrome": {
@@ -55,25 +57,15 @@ class ComputerManager:
     def open_app(self, app_name):
 
         app_name = app_name.lower().strip()
-
+    
         aliases = {
-            "vs code": "vscode",
-            "visual studio code": "vscode",
+            "vs code": "visual studio code",
+            "vscode": "visual studio code",
         }
-
+    
         app_name = aliases.get(app_name, app_name)
-
-        if app_name not in self.APPS:
-            return False, f"I don't know how to open '{app_name}'."
-
-        path = os.path.expandvars(self.APPS[app_name]["path"])
-
-        try:
-            subprocess.Popen(path)
-            return True, f"Opening {app_name.title()}..."
-
-        except Exception as e:
-            return False, str(e)
+    
+        return self.app_manager.open(app_name)
 
     def close_app(self, app_name):
 
@@ -111,16 +103,16 @@ class ComputerManager:
     def open_folder(self, folder_name):
 
         folder_name = folder_name.lower().strip()
-    
+
         path = self.windows.get_folder(folder_name)
-    
+
         if path is None:
             return False, f"I don't know the folder '{folder_name}'."
-    
+
         try:
             os.startfile(path)
             return True, f"Opening {folder_name.title()}..."
-    
+
         except Exception as e:
             return False, str(e)
 

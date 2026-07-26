@@ -40,9 +40,9 @@ class ComputerEngine:
                 }
 
             return {
-                "handled": False,
-                "response": None,
-            }
+                "handled": True,
+                "response": f"I couldn't find an application or folder named '{target}'."
+}
 
         # ----------------------------
         # Close Applications
@@ -69,9 +69,9 @@ class ComputerEngine:
                 }
 
             return {
-                "handled": False,
-                "response": None,
-            }
+                "handled": True,
+                "response": f"I couldn't find an application or folder named '{target}' to close."
+                }
 
         # ----------------------------
         # Lock Computer
