@@ -1,7 +1,15 @@
 from app.computer.application_indexer import ApplicationIndexer
+from app.computer.application_discovery.fingerprint_manager import FingerprintManager
 
-apps = ApplicationIndexer().load()
+indexer = ApplicationIndexer()
+manager = FingerprintManager()
 
-for app in apps:
-    if "trading" in app["name"].lower():
-        print(app)
+apps = indexer.load()
+
+print("Changed:", manager.changed(apps))
+
+manager.save(
+    manager.generate(apps)
+)
+
+print("Fingerprint saved.")

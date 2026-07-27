@@ -18,6 +18,7 @@ from app.context.context_builder import ContextBuilder
 from app.memory.memory_filter import MemoryFilter
 
 from app.actions.pending_action_manager import PendingActionManager
+from app.computer.application_indexer import ApplicationIndexer
 
 class Sophia:
 
@@ -44,6 +45,9 @@ class Sophia:
             SummaryStorage.load()
         )
         self.pending_actions = PendingActionManager()
+        self.application_indexer = ApplicationIndexer()
+
+        self.application_indexer.initialize()
 
 
     def start(self):
