@@ -152,7 +152,7 @@ class Sophia:
 
             user_input = input("\nYou: ")
 
-            if user_input.lower() in ["exit", "quit"]:
+            if user_input.lower() in ["x","X"]:
 
                 print(f"\n{self.settings.app_name}: Goodbye! 👋")
 

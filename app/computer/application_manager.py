@@ -2,6 +2,7 @@ from app.computer.application_indexer import ApplicationIndexer
 from app.computer.application_launcher import ApplicationLauncher
 from app.computer.application_refresh_manager import ApplicationRefreshManager
 from app.computer.search.application_ranker import ApplicationRanker
+from app.computer.semantic.semantic_index import SemanticIndex
 
 
 class ApplicationManager:
@@ -12,6 +13,7 @@ class ApplicationManager:
         self.launcher = ApplicationLauncher()
         self.refresh_manager = ApplicationRefreshManager()
         self.ranker = ApplicationRanker()
+        self.semantic = SemanticIndex()
 
     # -----------------------------------------
 
@@ -63,6 +65,7 @@ class ApplicationManager:
     def open(self, app_name):
 
         applications = self.indexer.load()
+        applications = self.semantic.build(applications)
     
         matches = self.ranker.rank(
             applications,

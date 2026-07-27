@@ -1,15 +1,6 @@
-from app.computer.application_indexer import ApplicationIndexer
-from app.computer.application_discovery.fingerprint_manager import FingerprintManager
+from app.computer.history.launch_history_manager import LaunchHistoryManager
 
-indexer = ApplicationIndexer()
-manager = FingerprintManager()
+history = LaunchHistoryManager()
 
-apps = indexer.load()
-
-print("Changed:", manager.changed(apps))
-
-manager.save(
-    manager.generate(apps)
-)
-
-print("Fingerprint saved.")
+print(history.score("Google Chrome"))
+print(history.score("Visual Studio Code"))

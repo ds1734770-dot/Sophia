@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 from app.settings.paths import APPLICATION_DATABASE
 
@@ -9,7 +10,7 @@ class LaunchHistoryManager:
 
         self.file = APPLICATION_DATABASE.parent / "launch_history.json"
 
-    # ----------------------------
+    # ------------------------------------------------
 
     def load(self):
 
@@ -25,7 +26,7 @@ class LaunchHistoryManager:
 
             return json.load(f)
 
-    # ----------------------------
+    # ------------------------------------------------
 
     def save(self, data):
 
@@ -41,20 +42,101 @@ class LaunchHistoryManager:
                 indent=4
             )
 
-    # ----------------------------
+    # ------------------------------------------------
 
     def increment(self, app_name):
 
         data = self.load()
 
-        data[app_name] = data.get(app_name, 0) + 1
+        if app_name not in data:
+
+            data[app_name] = {
+                "count": 0,
+                "last_used": "",
+                "favorite": False
+            }
+
+        data[app_name]["count"] += 1
+        data[app_name]["last_used"] = datetime.now().isoformat()
 
         self.save(data)
 
-    # ----------------------------
+    # ------------------------------------------------
+
+    def set_favorite(self, app_name, value=True):
+
+        data = self.load()
+
+        if app_name not in data:
+
+            data[app_name] = {
+                "count": 0,
+                "last_used": "",
+                "favorite": value
+            }
+
+        data[app_name]["favorite"] = value
+
+        self.save(data)
+
+    # ------------------------------------------------
 
     def score(self, app_name):
 
         data = self.load()
 
-        return data.get(app_name, 0)
+        if app_name not in data:
+
+            return 0
+
+        app = data[app_name]
+
+        score = 0
+
+        # --------------------------
+        # Frequency
+        # --------------------------
+
+        score += min(app["count"], 30)
+
+        # --------------------------
+        # Favorite
+        # --------------------------
+
+        if app.get("favorite", False):
+
+            score += 30
+
+        # --------------------------
+        # Recent Usage
+        # --------------------------
+
+        if app.get("last_used"):
+
+            try:
+
+                last_used = datetime.fromisoformat(
+                    app["last_used"]
+                )
+
+                hours = (
+                    datetime.now() - last_used
+                ).total_seconds() / 3600
+
+                if hours <= 1:
+
+                    score += 20
+
+                elif hours <= 24:
+
+                    score += 10
+
+                elif hours <= 168:
+
+                    score += 5
+
+            except Exception:
+
+                pass
+
+        return score
