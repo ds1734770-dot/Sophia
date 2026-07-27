@@ -1,6 +1,7 @@
 from multiprocessing import context
 
 from app.brain.tool_context import ToolContext
+from app.computer.application_manager import ApplicationManager
 from app.config.settings import Settings
 from app.brain.brain import Brain
 
@@ -19,6 +20,8 @@ from app.memory.memory_filter import MemoryFilter
 
 from app.actions.pending_action_manager import PendingActionManager
 from app.computer.application_indexer import ApplicationIndexer
+
+from app.computer.background_watcher.watcher_manager import WatcherManager
 
 class Sophia:
 
@@ -45,9 +48,9 @@ class Sophia:
             SummaryStorage.load()
         )
         self.pending_actions = PendingActionManager()
-        self.application_indexer = ApplicationIndexer()
-
-        self.application_indexer.initialize()
+        self.application_manager = ApplicationManager()
+        self.watcher_manager = WatcherManager()
+        self.application_manager.initialize()
 
 
     def start(self):
@@ -55,6 +58,7 @@ class Sophia:
         print("=" * 50)
         print(f"🤖 {self.settings.app_name}")
         print(f"Version: {self.settings.version}")
+        self.watcher_manager.start()
         print("=" * 50)
         print("Sophia is online!")
 

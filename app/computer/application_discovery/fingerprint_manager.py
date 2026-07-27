@@ -9,7 +9,9 @@ class FingerprintManager:
 
     def __init__(self):
 
-        self.file = APPLICATION_DATABASE.parent / "fingerprint.json"
+        self.file = APPLICATION_DATABASE.parent / "fingerprints.json"
+
+    # ----------------------------------
 
     def generate(self, applications):
 
@@ -24,63 +26,50 @@ class FingerprintManager:
         data = json.dumps(names)
 
         return hashlib.sha256(
-
             data.encode()
-
         ).hexdigest()
+
+    # ----------------------------------
 
     def load(self):
 
         if not self.file.exists():
-
-            return None
+            return {}
 
         with open(
-
             self.file,
-
             "r",
-
-            encoding="utf-8",
-
+            encoding="utf-8"
         ) as f:
 
             return json.load(f)
 
-    def save(self, fingerprint):
+    # ----------------------------------
+
+    def save(self, source, fingerprint):
+
+        data = self.load()
+
+        data[source] = fingerprint
 
         with open(
-
             self.file,
-
             "w",
-
-            encoding="utf-8",
-
+            encoding="utf-8"
         ) as f:
 
             json.dump(
-
-                {
-
-                    "fingerprint": fingerprint
-
-                },
-
+                data,
                 f,
-
-                indent=4,
-
+                indent=4
             )
 
-    def changed(self, applications):
+    # ----------------------------------
+
+    def changed(self, source, applications):
 
         current = self.generate(applications)
 
         saved = self.load()
 
-        if saved is None:
-
-            return True
-
-        return current != saved["fingerprint"]
+        return saved.get(source) != current

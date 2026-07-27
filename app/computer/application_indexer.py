@@ -111,9 +111,9 @@ class ApplicationIndexer:
 
     # ----------------------------
 
-    def build(self):
+    def build(self, refresh_result):
 
-        return self.discovery.discover()
+        return self.discovery.discover(refresh_result)
 
     # ----------------------------
 
@@ -164,3 +164,10 @@ class ApplicationIndexer:
             count = self.save(applications)
 
             print(f"[ApplicationIndexer] Indexed {count} applications.")
+    # def initialize(self):
+
+    #     applications = self.build()
+    
+    #     count = self.save(applications)
+    
+    #     print(f"[ApplicationIndexer] Indexed {count} applications.")
