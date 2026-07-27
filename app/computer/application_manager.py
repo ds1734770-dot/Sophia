@@ -1,6 +1,7 @@
 from app.computer.application_indexer import ApplicationIndexer
 from app.computer.application_launcher import ApplicationLauncher
 from app.computer.application_refresh_manager import ApplicationRefreshManager
+from app.computer.search.application_ranker import ApplicationRanker
 
 
 class ApplicationManager:
@@ -10,6 +11,7 @@ class ApplicationManager:
         self.indexer = ApplicationIndexer()
         self.launcher = ApplicationLauncher()
         self.refresh_manager = ApplicationRefreshManager()
+        self.ranker = ApplicationRanker()
 
     # -----------------------------------------
 
@@ -17,25 +19,25 @@ class ApplicationManager:
 
     # First launch
         if not self.indexer.database.exists():
-        
+
             self.refresh()
-    
+
             return
-    
+
         result = self.refresh_manager.refresh()
-    
+
         if result.changed:
-        
+
             applications = self.indexer.build(result)
-    
+
             self.indexer.save(applications)
-    
+
             self.refresh_manager.save_fingerprints(result)
-    
+
             print("[ApplicationManager] Applications refreshed.")
-    
+
         else:
-        
+
             print("[ApplicationManager] Using cached application database.")
 
     # -----------------------------------------
@@ -60,29 +62,17 @@ class ApplicationManager:
 
     def open(self, app_name):
 
-        app_name = app_name.lower().strip()
-
         applications = self.indexer.load()
-
-        # Exact Match
-        for app in applications:
-
-            if app["name"].lower() == app_name:
-
-                return self.launcher.launch(app)
-
-        # Alias Match
-        for app in applications:
-
-            if app_name in app.get("aliases", []):
-
-                return self.launcher.launch(app)
-
-        # Partial Match
-        for app in applications:
-
-            if app_name in app["name"].lower():
-
-                return self.launcher.launch(app)
-
-        return False, "No matching application found."
+    
+        matches = self.ranker.rank(
+            applications,
+            app_name
+        )
+    
+        if not matches:
+        
+            return False, "No matching application found."
+    
+        return self.launcher.launch(
+            matches[0].app
+        )

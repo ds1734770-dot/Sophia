@@ -1,6 +1,8 @@
+import os
 from subprocess import Popen
+
 from app.computer.application_discovery.shortcut_resolver import ShortcutResolver
-import shlex
+from app.computer.history.launch_history_manager import LaunchHistoryManager
 
 
 class ApplicationLauncher:
@@ -8,6 +10,9 @@ class ApplicationLauncher:
     def __init__(self):
 
         self.resolver = ShortcutResolver()
+        self.history = LaunchHistoryManager()
+
+    # ----------------------------------------
 
     def launch(self, application):
 
@@ -16,25 +21,21 @@ class ApplicationLauncher:
 
             Popen([application["exe"]])
 
+            self.history.increment(
+                application["name"]
+            )
+
             return True, f"Opening {application['name']}..."
 
-        # Shortcut-based applications
+        # Shortcut applications
         if "shortcut" in application:
 
-            info = self.resolver.resolve(application["shortcut"])
+            os.startfile(
+                application["shortcut"]
+            )
 
-            if info is None:
-                return False, "Unable to resolve shortcut."
-
-            command = [info["target"]]
-
-            if info["arguments"]:
-
-                command.extend(shlex.split(info["arguments"], posix=False))
-
-            Popen(
-                command,
-                cwd=info["working_directory"] or None,
+            self.history.increment(
+                application["name"]
             )
 
             return True, f"Opening {application['name']}..."
