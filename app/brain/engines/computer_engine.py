@@ -1,68 +1,43 @@
-
-
-
-
+from app.brain.command_parser.command_parser import CommandParser
 from app.computer.computer_manager import ComputerManager
-
 
 
 class ComputerEngine:
 
     def __init__(self):
+
         self.computer = ComputerManager()
+        self.parser = CommandParser()
 
-    def execute(self, command,context):
+    # --------------------------------------------------
 
-        command = command.lower().strip()
+    def execute(self, command, context):
 
-        # ----------------------------
-        # Open Applications / Folders
-        # ----------------------------
+        parsed = self.parser.parse(command)
 
-        if command.startswith("open "):
+        # --------------------------------------------------
+        # OPEN
+        # --------------------------------------------------
 
-            target = command.replace("open ", "").strip()
+        if parsed.action == "open":
 
-            success, response = self.computer.open_app(target)
+            success, response = self.computer.open_app(
+                parsed.entity
+            )
 
             if success:
+
                 return {
                     "handled": True,
                     "response": response,
                 }
 
-            success, response = self.computer.open_folder(target)
+            success, response = self.computer.open_folder(
+                parsed.entity
+            )
 
             if success:
-                return {
-                    "handled": True,
-                    "response": response,
-                }
 
-            return {
-                "handled": True,
-                "response": f"I couldn't find an application or folder named '{target}'."
-}
-
-        # ----------------------------
-        # Close Applications
-        # ----------------------------
-
-        if command.startswith("close "):
-
-            target = command.replace("close ", "").strip()
-
-            success, response = self.computer.close_app(target)
-
-            if success:
-                return {
-                    "handled": True,
-                    "response": response,
-                }
-
-            success, response = self.computer.close_folder(target)
-
-            if success:
                 return {
                     "handled": True,
                     "response": response,
@@ -70,21 +45,53 @@ class ComputerEngine:
 
             return {
                 "handled": True,
-                "response": f"I couldn't find an application or folder named '{target}' to close."
+                "response": (
+                    f"I couldn't find an application or folder "
+                    f"named '{parsed.entity}'."
+                ),
+            }
+
+        # --------------------------------------------------
+        # CLOSE
+        # --------------------------------------------------
+
+        if parsed.action == "close":
+
+            success, response = self.computer.close_app(
+                parsed.entity
+            )
+
+            if success:
+
+                return {
+                    "handled": True,
+                    "response": response,
                 }
 
-        # ----------------------------
-        # Lock Computer
-        # ----------------------------
+            success, response = self.computer.close_folder(
+                parsed.entity
+            )
 
-        if command in [
-            "lock",
-            "lock pc",
-            "lock computer",
-            "lock the computer",
-            "lock screen",
-            "lock the screen",
-        ]:
+            if success:
+
+                return {
+                    "handled": True,
+                    "response": response,
+                }
+
+            return {
+                "handled": True,
+                "response": (
+                    f"I couldn't find an application or folder "
+                    f"named '{parsed.entity}' to close."
+                ),
+            }
+
+        # --------------------------------------------------
+        # LOCK
+        # --------------------------------------------------
+
+        if parsed.action == "lock":
 
             success, response = self.computer.lock()
 
@@ -92,6 +99,8 @@ class ComputerEngine:
                 "handled": success,
                 "response": response,
             }
+
+        # --------------------------------------------------
 
         return {
             "handled": False,
