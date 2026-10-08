@@ -13,7 +13,7 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 | Apps and windows | "Open VS Code", "Open YouTube", "Close Spotify", "Minimize Chrome" |
 | Files, whole PC | "Find my resume", "Summarize that PDF", "Move it to Documents", "Undo that" |
 | Shell | "How much free space do I have?", "What is using port 3000?" (shows the exact PowerShell command first) |
-| Screen control | "Click the Send button", "Type my email in the search box" (looks at the screen, then clicks and types) |
+| Screen control | "Click the Send button", "Type my email in the search box" (reads the window's controls through Windows accessibility for exact, fast clicks; falls back to looking at the screen) |
 | Screen questions | "What error is on my screen?" |
 | Reminders and routines | "Remind me at 6pm", "Timer for 10 minutes", "Every weekday at 8 give me a morning briefing" |
 | Notes and to-dos | "Add a to-do: finish report", "Note that the exam is on Monday" |
@@ -48,6 +48,12 @@ python main.py --chat     # classic chat window instead
 The welcome screen in the chat window shows the car too, with tap-to-send ideas; it folds into the header after your first message and replies are typed out word by word.
 
 Sophia can launch any program on your PC (she shows the path, whether it is signed and whether it was downloaded; one "Always allow" covers the session), open any folder, and look at and operate anything visible on your screen.
+
+## Speed and screen control
+
+- **Answers stream.** Text appears as Gemini writes it and is spoken sentence by sentence, instead of everything arriving at the end.
+- **Controls are read, not guessed.** For "click Send" or "type in the search box" Sophia reads the window's buttons, menus, tabs and text boxes through Windows UI Automation (about half a second, no AI request, usually no mouse movement), and only looks at a screenshot for things that are not real controls (web page content, images). Password boxes are never typed into, and Sophia's own windows are never driven.
+- **She knows your PC up front:** your folders, installed programs and open windows are part of every request, so she does not have to search for them.
 
 ## How it decides what to do
 

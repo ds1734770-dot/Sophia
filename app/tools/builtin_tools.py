@@ -40,6 +40,7 @@ def build_default_registry(
     personal=None,
     reminders=None,
     screen=None,
+    elements=None,
     undo=None,
     screen_policy=None,
 ):
@@ -431,7 +432,7 @@ def build_default_registry(
     # ----------------------------------------------
 
     if screen is not None:
-        register_screen_tools(registry, screen)
+        register_screen_tools(registry, screen, elements, screen_policy)
 
     # ----------------------------------------------
     # Shell

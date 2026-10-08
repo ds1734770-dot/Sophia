@@ -11,6 +11,7 @@ pyinstaller --noconfirm --clean --windowed --name Sophia `
     --collect-all trafilatura `
     --collect-all ddgs `
     --collect-all edge_tts `
+    --collect-all uiautomation `
     --collect-submodules keyring.backends `
     --hidden-import win32timezone `
     --exclude-module tkinter `

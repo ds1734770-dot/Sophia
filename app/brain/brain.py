@@ -18,8 +18,22 @@ from app.tools.integration_tools import register_integration_tools
 from app.tools.mcp_bridge import McpBridge
 from app.tools.plugins import load_plugins
 from app.computer.screen_control import ScreenControl
+from app.computer.ui_automation import ScreenElements
 from app.planner.reminder_service import FiredStore, RoutineStore, TimerStore
 
+
+
+class _Mouse:
+    """
+    Clicks through the screen control, whose mouse backend is created
+    only when it is first used.
+    """
+
+    def __init__(self, screen):
+        self.screen = screen
+
+    def click(self, x, y, button="left", double=False):
+        self.screen.backend.click(x, y, button=button, double=double)
 
 
 SUMMARY_MAX_MESSAGES = 60
@@ -60,6 +74,13 @@ class Brain:
             clipboard=self._clipboard(),
         )
 
+        # Controls read from the Windows accessibility tree; the mouse
+        # and keyboard are the screen's own, created when first needed
+        self.elements = ScreenElements(
+            mouse=_Mouse(self.screen),
+            typer=self.screen.type_text,
+        )
+
         self.registry = build_default_registry(
             computer=self.tool_engine.computer,
             browser=self.tool_engine.browser,
@@ -74,6 +95,7 @@ class Brain:
             notes=NoteStore(DATA_DIR / "notes.json"),
             reminders=(self.timers, self.routines),
             screen=self.screen,
+            elements=self.elements,
             undo=self.undo,
             screen_policy=self.screen_policy,
         )
