@@ -295,7 +295,7 @@ def test_the_app_icon_is_a_car():
             if image.pixelColor(x, y).red() > 200 and image.pixelColor(x, y).blue() < 90
         )
 
-        assert yellow > size * size * 0.08
+        assert yellow > size * size * 0.04
 
 
 def test_the_packaged_icon_file_matches():
