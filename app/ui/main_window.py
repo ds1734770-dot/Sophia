@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from app.computer.autostart import Autostart
 from app.ui import theme
 from app.ui.widgets import ChatView
+from app.voice.wakeword import spoken_name
 
 log = logging.getLogger("sophia.ui")
 
@@ -55,6 +56,21 @@ def make_icon():
     painter.end()
 
     return QIcon(pixmap)
+
+
+def _default_beep():
+    """
+    A short tone: Sophia heard the wake word and is listening.
+    """
+
+    try:
+
+        import winsound
+
+        winsound.Beep(880, 120)
+
+    except Exception:
+        pass
 
 
 def make_mic_icon(color="#e8eaf0"):
@@ -192,6 +208,9 @@ class MainWindow(QMainWindow):
     # to the UI thread.
     notified = Signal(str, str)
 
+    # The wake word is heard on the audio thread
+    wake_heard = Signal()
+
     def __init__(
         self,
         sophia_factory,
@@ -201,6 +220,8 @@ class MainWindow(QMainWindow):
         settings=None,
         use_tray=True,
         autostart=None,
+        wake_factory=None,
+        beep=None,
     ):
 
         super().__init__()
@@ -211,6 +232,10 @@ class MainWindow(QMainWindow):
         self.transcriber = transcriber
         self.settings = settings or QSettings("Sophia", "Sophia")
         self.autostart = autostart or Autostart()
+        self.wake_factory = wake_factory
+        self.beep = beep or _default_beep
+        self.wake_listener = None
+        self._voice_turn = False
 
         self.sophia = None
         self.busy = False
@@ -228,6 +253,7 @@ class MainWindow(QMainWindow):
         self.tray = self._build_tray() if use_tray else None
 
         self.notified.connect(self._on_notified)
+        self.wake_heard.connect(self._on_wake)
 
         self._set_ready(False, "Starting...")
 
@@ -323,6 +349,14 @@ class MainWindow(QMainWindow):
         clear = QAction("Clear chat view", self)
         clear.triggered.connect(self.chat.clear)
 
+        self.hands_free_action = QAction("Hands-free (wake word)", self)
+        self.hands_free_action.setCheckable(True)
+        self.hands_free_action.setEnabled(self.wake_factory is not None)
+        self.hands_free_action.setToolTip(
+            "Listen for the wake word with the microphone, all on this PC"
+        )
+        self.hands_free_action.toggled.connect(self._set_hands_free)
+
         self.autostart_action = QAction("Start with Windows", self)
         self.autostart_action.setCheckable(True)
         self.autostart_action.setChecked(self.autostart.is_enabled())
@@ -333,6 +367,7 @@ class MainWindow(QMainWindow):
 
         menu.addAction(usage)
         menu.addAction(clear)
+        menu.addAction(self.hands_free_action)
         menu.addAction(self.autostart_action)
         menu.addSeparator()
         menu.addAction(quit_action)
@@ -417,6 +452,12 @@ class MainWindow(QMainWindow):
 
         self._set_ready(True, "Ready")
 
+        # Remember hands-free across restarts
+        if self.wake_factory is not None and self.settings.value(
+            "hands_free", False, type=bool
+        ):
+            self.hands_free_action.setChecked(True)
+
     def _on_start_failed(self, error):
 
         self.chat.add(
@@ -469,8 +510,13 @@ class MainWindow(QMainWindow):
 
         self._maybe_add_confirm_bar()
 
-        if self.speaker is not None and self.voice_toggle.isChecked():
+        # Spoken replies when asked to, and always after a spoken request
+        if self.speaker is not None and (
+            self.voice_toggle.isChecked() or self._voice_turn
+        ):
             self.speaker.say(result["response"])
+
+        self._voice_turn = False
 
         self._finish_turn()
 
@@ -480,14 +526,18 @@ class MainWindow(QMainWindow):
 
         self.chat.add(f"Something went wrong: {error}", "bot")
 
+        self._voice_turn = False
+
         self._finish_turn()
 
     def _finish_turn(self):
 
         self.busy = False
         self.send_button.setEnabled(True)
-        self.status.setText("Ready")
+        self.status.setText(self._idle_status())
         self.input.setFocus()
+
+        self._resume_wake_when_quiet()
 
     # ------------------------------------------------
     # Proactive alerts
@@ -570,7 +620,10 @@ class MainWindow(QMainWindow):
             log.exception("Microphone unavailable")
 
             self.recorder = None
+            self._voice_turn = False
             self.chat.add(f"I couldn't use the microphone: {e}", "bot")
+
+            self._resume_wake_when_quiet()
 
             return
 
@@ -607,6 +660,9 @@ class MainWindow(QMainWindow):
 
             self.status.setText("I didn't hear anything")
 
+            self._voice_turn = False
+            self._resume_wake_when_quiet()
+
             return
 
         self.status.setText("Transcribing (first time loads the speech model)...")
@@ -624,6 +680,9 @@ class MainWindow(QMainWindow):
 
             self.status.setText("I didn't catch that")
 
+            self._voice_turn = False
+            self._resume_wake_when_quiet()
+
             return
 
         self.status.setText("Ready")
@@ -635,6 +694,104 @@ class MainWindow(QMainWindow):
         self.status.setText("Ready")
 
         self.chat.add(f"I couldn't understand the audio: {error}", "bot")
+
+        self._voice_turn = False
+        self._resume_wake_when_quiet()
+
+    # ------------------------------------------------
+    # Hands-free (wake word)
+    # ------------------------------------------------
+
+    def _idle_status(self):
+
+        if self.wake_listener is not None and self.wake_listener.running:
+            return f"Listening for '{spoken_name(self.wake_listener.word)}'"
+
+        return "Ready"
+
+    def _set_hands_free(self, on):
+
+        self.settings.setValue("hands_free", on)
+
+        if not on:
+
+            if self.wake_listener is not None:
+
+                self.wake_listener.stop()
+                self.wake_listener = None
+
+            self.status.setText(self._idle_status())
+
+            return
+
+        if self.wake_factory is None or self.wake_listener is not None:
+            return
+
+        listener = self.wake_factory(self.wake_heard.emit)
+
+        self.wake_listener = listener
+
+        self.status.setText("Starting wake word (first time downloads a small model)...")
+
+        run_task(listener.start, (), self._on_wake_ready, self._on_wake_failed)
+
+    def _on_wake_ready(self, _result):
+
+        self.status.setText(self._idle_status())
+
+    def _on_wake_failed(self, error):
+
+        self.wake_listener = None
+
+        self.hands_free_action.blockSignals(True)
+        self.hands_free_action.setChecked(False)
+        self.hands_free_action.blockSignals(False)
+
+        self.settings.setValue("hands_free", False)
+
+        self.status.setText("Ready")
+
+        self.chat.add(f"I couldn't start the wake word: {error}", "bot")
+
+    def _on_wake(self):
+
+        # Heard the wake word: listen for the request
+        if self.wake_listener is None or self.busy or self.recorder is not None:
+            return
+
+        self.wake_listener.pause()
+
+        if self.speaker is not None:
+            self.speaker.stop()
+
+        self.beep()
+
+        self._voice_turn = True
+
+        self.toggle_listening()
+
+    def _resume_wake_when_quiet(self, tries=0):
+        """
+        Listen for the wake word again once Sophia has finished
+        speaking (so she does not hear herself).
+        """
+
+        if self.wake_listener is None or not self.wake_listener.running:
+            return
+
+        if self.busy or self.recorder is not None:
+            return
+
+        speaking = self.speaker is not None and self.speaker.speaking.is_set()
+
+        if speaking and tries < 120:
+
+            QTimer.singleShot(500, lambda: self._resume_wake_when_quiet(tries + 1))
+
+            return
+
+        self.wake_listener.resume()
+        self.status.setText(self._idle_status())
 
     # ------------------------------------------------
     # Window behaviour
@@ -659,6 +816,9 @@ class MainWindow(QMainWindow):
     def quit(self):
 
         self._quitting = True
+
+        if self.wake_listener is not None:
+            self.wake_listener.stop()
 
         if self.speaker is not None:
             self.speaker.close()

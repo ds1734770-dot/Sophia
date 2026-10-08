@@ -109,22 +109,42 @@ def run_gui(voice=True, minimized=False):
 
     settings = Settings()
 
-    speaker = recorder_factory = transcriber = None
+    speaker = recorder_factory = transcriber = wake_factory = None
 
     if voice:
 
         from app.voice.listener import Recorder, Transcriber
-        from app.voice.speaker import Speaker
+        from app.voice.neural_voice import EdgeBackend
+        from app.voice.speaker import SapiBackend, Speaker
+        from app.voice.wakeword import WakeWordListener
 
-        speaker = Speaker()
+        if settings.neural_voice:
+
+            def backend():
+                return EdgeBackend(settings.tts_voice, fallback=SapiBackend())
+
+            speaker = Speaker(backend_factory=backend)
+
+        else:
+
+            speaker = Speaker()
+
         recorder_factory = Recorder
         transcriber = Transcriber(settings.whisper_model)
+
+        def wake_factory(on_wake):
+            return WakeWordListener(
+                on_wake,
+                word=settings.wake_word,
+                threshold=settings.wake_threshold,
+            )
 
     window = MainWindow(
         create_sophia,
         speaker=speaker,
         recorder_factory=recorder_factory,
         transcriber=transcriber,
+        wake_factory=wake_factory,
     )
 
     hotkey = HotkeyFilter(window.toggle_visibility)

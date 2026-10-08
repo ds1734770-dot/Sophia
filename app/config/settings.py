@@ -17,6 +17,11 @@ DEFAULT_LIGHT_MODEL = "gemini-3.1-flash-lite"
 # Local speech recognition (downloaded once on first use)
 DEFAULT_WHISPER_MODEL = "base.en"
 
+# Natural voice (Microsoft Edge neural voices; needs internet, falls back
+# to the offline Windows voice) and the hands-free wake word
+DEFAULT_TTS_VOICE = "en-IN-NeerjaNeural"
+DEFAULT_WAKE_WORD = "hey_jarvis"
+
 
 class Settings:
     def __init__(self):
@@ -30,6 +35,10 @@ class Settings:
             os.getenv("GEMINI_API_KEY") or get_stored_api_key()
         )
         self.whisper_model = os.getenv("WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
+        self.tts_voice = os.getenv("TTS_VOICE") or DEFAULT_TTS_VOICE
+        self.neural_voice = (os.getenv("NEURAL_VOICE") or "true").lower() not in ("0", "false", "no")
+        self.wake_word = os.getenv("WAKE_WORD") or DEFAULT_WAKE_WORD
+        self.wake_threshold = float(os.getenv("WAKE_THRESHOLD") or 0.5)
         self.model_name = os.getenv("MODEL_NAME") or DEFAULT_MODEL
         self.fallback_models = [
             m.strip()

@@ -108,7 +108,8 @@ class ToolRegistry:
 
     def declarations(self):
 
-        return [tool.declaration() for tool in self.tools.values()]
+        # a copy: integrations may add tools while a request is built
+        return [tool.declaration() for tool in list(self.tools.values())]
 
     def safe_only(self):
         """

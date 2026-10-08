@@ -91,6 +91,7 @@ class Sophia:
 
         self.watcher_manager.start()
         self.reminders.start()
+        self.brain.start_integrations()
 
     def start(self):
 

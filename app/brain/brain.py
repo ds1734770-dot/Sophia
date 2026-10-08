@@ -14,6 +14,9 @@ from app.computer.shell_runner import ShellRunner
 from app.settings.paths import DATA_DIR, LOGS_DIR, PROJECT_ROOT
 from app.tools.notes_store import NoteStore
 from app.tools.undo import UndoStack
+from app.tools.integration_tools import register_integration_tools
+from app.tools.mcp_bridge import McpBridge
+from app.tools.plugins import load_plugins
 from app.computer.screen_control import ScreenControl
 from app.planner.reminder_service import FiredStore, RoutineStore, TimerStore
 
@@ -71,6 +74,24 @@ class Brain:
             undo=self.undo,
         )
 
+
+        # Integrations: plugins (loaded now) and MCP servers (connected
+        # in the background by start_integrations)
+        self.plugins = load_plugins(
+            self.registry,
+            [DATA_DIR / "plugins", PROJECT_ROOT / "plugins"],
+            services={"guard": self.guard, "data_dir": DATA_DIR},
+        )
+
+        self.mcp = McpBridge(self.registry, DATA_DIR / "mcp.json")
+
+        register_integration_tools(
+            self.registry, self.mcp, DATA_DIR / "mcp.json", self.plugins
+        )
+
+    def start_integrations(self):
+
+        self.mcp.start()
 
     # -----------------------------------------------------
 
