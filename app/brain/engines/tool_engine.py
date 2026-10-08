@@ -23,6 +23,28 @@ class ToolEngine:
 
         ]
 
+    @property
+    def computer(self):
+        return self._find(ComputerEngine).computer
+
+    @property
+    def browser(self):
+        return self._find(BrowserEngine).browser
+
+    @property
+    def file_manager(self):
+        return self._find(FileEngine).file_manager
+
+    @property
+    def indexer(self):
+        return self._find(FileEngine).indexer
+
+    def _find(self, engine_type):
+
+        return next(
+            e for e in self.engines if isinstance(e, engine_type)
+        )
+
     def process(self, command, context):
 
         for engine in self.engines:

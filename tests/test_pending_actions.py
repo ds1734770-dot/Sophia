@@ -1,87 +1,120 @@
+import pytest
+
 from app.actions.pending_action_manager import PendingActionManager
 from app.brain.engines.pending_action_engine import PendingActionEngine
 from app.brain.tool_context import ToolContext
+from app.tools.registry import Risk, Tool, ToolRegistry
 
 
-class FakeFileManager:
+def make_context(risk=Risk.CONFIRM):
 
-    def __init__(self):
-        self.calls = []
+    calls = []
 
-    def rename(self, path, new_name):
-        self.calls.append((path, new_name))
-        return True, "renamed"
-
-
-class FakeIndexer:
-
-    saved = False
-
-    def save(self):
-        self.saved = True
-
-
-def make_context():
+    registry = ToolRegistry()
+    registry.register(Tool(
+        name="wipe",
+        description="test tool",
+        parameters={"target": {"type": "string"}},
+        required=["target"],
+        risk=risk,
+        preview=lambda a: f"About to wipe {a['target']}.",
+        handler=lambda context, target: calls.append(target) or (True, f"wiped {target}"),
+    ))
 
     context = ToolContext()
     context.pending_actions = PendingActionManager()
-    context.file_manager = FakeFileManager()
-    context.file_indexer = FakeIndexer()
+    context.registry = registry
 
-    context.pending_actions.start(
-        action="rename",
-        matches=[{"path": "a.txt"}, {"path": "b.txt"}],
-        data={"new_name": "c.txt"},
-    )
-
-    return context
+    return context, calls
 
 
-def test_start_activates_the_pending_action():
+def ask(context):
 
-    context = make_context()
+    return context.registry.execute("wipe", {"target": "x"}, context)
 
+
+def test_risky_tool_waits_for_confirmation():
+
+    context, calls = make_context()
+
+    result = ask(context)
+
+    assert result.needs_confirmation
+    assert "About to wipe x" in result.message
+    assert "yes" in result.message
+    assert calls == []
     assert context.pending_actions.current().exists()
 
 
-def test_choosing_a_number_renames_that_item():
+def test_dangerous_tool_shows_a_warning():
 
-    context = make_context()
+    context, _ = make_context(Risk.DANGEROUS)
 
-    result = PendingActionEngine().process("2", context)
+    assert ask(context).message.startswith("Warning:")
 
-    assert result == {"handled": True, "response": "renamed"}
-    assert context.file_manager.calls == [("b.txt", "c.txt")]
-    assert context.file_indexer.saved
+
+def test_safe_tool_runs_immediately():
+
+    context, calls = make_context(Risk.SAFE)
+
+    result = ask(context)
+
+    assert not result.needs_confirmation
+    assert calls == ["x"]
+
+
+@pytest.mark.parametrize("answer", ["yes", "Yes", "y", "ok", "go ahead", "yes."])
+def test_yes_runs_the_tool(answer):
+
+    context, calls = make_context()
+    ask(context)
+
+    result = PendingActionEngine().process(answer, context)
+
+    assert result == {"handled": True, "response": "wiped x"}
+    assert calls == ["x"]
     assert not context.pending_actions.current().exists()
 
 
-def test_invalid_number_keeps_waiting():
+@pytest.mark.parametrize("answer", ["no", "cancel", "nope"])
+def test_no_cancels(answer):
 
-    context = make_context()
+    context, calls = make_context()
+    ask(context)
 
-    result = PendingActionEngine().process("9", context)
-
-    assert result["handled"]
-    assert context.pending_actions.current().exists()
-
-
-def test_cancel():
-
-    context = make_context()
-
-    result = PendingActionEngine().process("cancel", context)
+    result = PendingActionEngine().process(answer, context)
 
     assert result["handled"]
+    assert calls == []
     assert not context.pending_actions.current().exists()
-    assert context.file_manager.calls == []
 
 
 def test_unrelated_message_is_not_trapped():
 
-    context = make_context()
+    context, calls = make_context()
+    ask(context)
 
     result = PendingActionEngine().process("what is python", context)
 
     assert not result["handled"]
+    assert calls == []
     assert not context.pending_actions.current().exists()
+
+
+def test_confirmation_cannot_be_replayed():
+
+    context, calls = make_context()
+    ask(context)
+
+    PendingActionEngine().process("yes", context)
+    second = PendingActionEngine().process("yes", context)
+
+    assert not second["handled"]
+    assert calls == ["x"]
+
+
+def test_no_pending_action_means_nothing_handled():
+
+    context, _ = make_context()
+
+    assert not PendingActionEngine().process("yes", context)["handled"]

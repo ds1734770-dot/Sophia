@@ -3,6 +3,16 @@ from app.file.file_indexer import FileIndexer
 
 
 class FileEngine:
+    """
+    Local, no-AI shortcuts for exact file commands:
+
+        create folder <name>
+        find <name>
+        rename <old name> to <new name>
+
+    Anything that changes files goes through the tool registry, so the
+    same safety checks and confirmations apply as for Gemini.
+    """
 
     def __init__(self):
 
@@ -28,14 +38,15 @@ class FileEngine:
                     "response": "Please provide a folder name."
                 }
 
-            success, response = self.file_manager.create_folder(folder_name)
-
-            if success:
-                self.indexer.save()
+            result = context.registry.execute(
+                "create_folder",
+                {"name": folder_name},
+                context,
+            )
 
             return {
                 "handled": True,
-                "response": response,
+                "response": result.message,
             }
 
         # ----------------------------
@@ -45,6 +56,15 @@ class FileEngine:
         if command.lower().startswith("find "):
 
             query = command[5:].strip()
+
+            # "find the file I downloaded last week" is a sentence for
+            # Gemini, not a file name.
+            if len(query.split()) > 3:
+
+                return {
+                    "handled": False,
+                    "response": None,
+                }
 
             if not query:
 
@@ -76,26 +96,14 @@ class FileEngine:
             }
 
         # ----------------------------
-        # Rename
+        # Rename (single exact target only)
         # ----------------------------
 
-        if command.lower().startswith("rename "):
+        if command.lower().startswith("rename ") and " to " in command:
 
-            text = command[7:].strip()
+            old_name, new_name = command[7:].split(" to ", 1)
 
-            if " to " not in text:
-
-                return {
-                    "handled": True,
-                    "response": "Usage: rename <old name> to <new name>"
-                }
-
-            old_name, new_name = text.split(" to ", 1)
-
-            old_name = old_name.strip()
-            new_name = new_name.strip()
-
-            success, results = self.indexer.search(old_name)
+            success, results = self.indexer.search(old_name.strip())
 
             if not success:
 
@@ -104,50 +112,26 @@ class FileEngine:
                     "response": results,
                 }
 
-            # Only one match -> rename immediately
-            if len(results) == 1:
-
-                success, response = self.file_manager.rename(
-                    results[0]["path"],
-                    new_name,
-                )
-
-                if success:
-                    self.indexer.save()
+            # Several matches: let Gemini ask which one is meant
+            if len(results) != 1:
 
                 return {
-                    "handled": True,
-                    "response": response,
+                    "handled": False,
+                    "response": None,
                 }
 
-            # Multiple matches -> create pending action
-
-            context.pending_actions.start(
-
-                action="rename",
-
-                matches=results,
-
-                data={
-                    "new_name": new_name,
-                }
-
+            result = context.registry.execute(
+                "rename_file",
+                {
+                    "path": results[0]["path"],
+                    "new_name": new_name.strip(),
+                },
+                context,
             )
-
-            message = "I found multiple matches:\n\n"
-
-            for i, item in enumerate(results, start=1):
-
-                message += (
-                    f"{i}. {item['name']}\n"
-                    f"   {item['path']}\n\n"
-                )
-
-            message += "Reply with the number of the item you want to rename."
 
             return {
                 "handled": True,
-                "response": message,
+                "response": result.message,
             }
 
         return {

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.brain.tool_context import ToolContext
 from app.computer.application_manager import ApplicationManager
 from app.config.settings import Settings
@@ -121,12 +123,17 @@ class Sophia:
         context.profile = self.profile
         context.settings = self.settings
 
-        context.file_manager = self.brain.tool_engine.engines[-1].file_manager
-        context.file_indexer = self.brain.tool_engine.engines[-1].indexer
-        
+        context.file_manager = self.brain.tool_engine.file_manager
+        context.file_indexer = self.brain.tool_engine.indexer
+
+        now = datetime.now().strftime("%A, %d %B %Y, %H:%M")
+
         return self.brain.chat(
             conversation=conversation,
-            system_instruction="",
+            system_instruction=(
+                f"Current local date and time: {now}. "
+                "The user is on Windows."
+            ),
             context=context
         )
 

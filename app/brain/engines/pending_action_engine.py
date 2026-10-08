@@ -1,4 +1,15 @@
 class PendingActionEngine:
+    """
+    Handles the user's answer to a question Sophia asked.
+
+    "confirm": a risky tool is waiting for yes / no.
+    Any other message cancels the question and is handled normally, so
+    Sophia never gets stuck waiting.
+    """
+
+    YES = {"yes", "y", "yeah", "yep", "sure", "ok", "okay", "confirm", "do it", "go ahead"}
+
+    NO = {"no", "n", "nope", "cancel", "stop", "don't", "dont"}
 
     def process(self, command, context):
 
@@ -11,62 +22,40 @@ class PendingActionEngine:
                 "response": None,
             }
 
-        # ----------------------------
-        # Rename
-        # ----------------------------
+        if pending.action == "confirm":
 
-        if pending.action == "rename":
+            answer = command.strip().lower().rstrip(".!")
 
-            if command.strip().lower() in ("cancel", "no", "stop"):
+            tool = pending.data["tool"]
+            args = pending.data["args"]
 
-                context.pending_actions.clear()
+            context.pending_actions.clear()
+
+            if answer in self.YES:
+
+                result = context.registry.execute(
+                    tool, args, context, confirmed=True
+                )
+
+                return {
+                    "handled": True,
+                    "response": result.message,
+                }
+
+            if answer in self.NO:
 
                 return {
                     "handled": True,
                     "response": "Okay, cancelled.",
                 }
 
-            try:
-
-                choice = int(command.strip()) - 1
-
-            except ValueError:
-
-                # Not an answer: drop the question and treat the
-                # message as a normal request.
-                context.pending_actions.clear()
-
-                return {
-                    "handled": False,
-                    "response": None,
-                }
-
-            if choice < 0 or choice >= len(pending.matches):
-
-                return {
-                    "handled": True,
-                    "response": "Invalid selection.",
-                }
-
-            selected = pending.matches[choice]
-
-            new_name = pending.data["new_name"]
-
-            success, response = context.file_manager.rename(
-                selected["path"],
-                new_name,
-            )
-
-            if success:
-
-                context.file_indexer.save()
-
-                context.pending_actions.clear()
-
+            # Something else: forget the question, handle as normal
             return {
-                "handled": True,
-                "response": response,
+                "handled": False,
+                "response": None,
             }
+
+        context.pending_actions.clear()
 
         return {
             "handled": False,

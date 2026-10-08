@@ -113,3 +113,17 @@ def test_open_without_target_asks():
 
     assert result["handled"]
     assert "What" in result["response"]
+
+
+def test_compound_requests_are_left_to_gemini():
+
+    engine = engine_with(FakeComputer((True, "opened")))
+
+    for text in [
+        "open the calculator app and tell me what 17*23 is",
+        "open chrome and then search for cats",
+        "open the spreadsheet with last quarter revenue numbers",
+    ]:
+        assert not engine.execute(text, None)["handled"]
+
+    assert engine.execute("open notepad", None)["handled"]

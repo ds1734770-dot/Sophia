@@ -6,9 +6,30 @@ class ChatEngine:
     def __init__(self):
         self.client = GeminiClient()
 
-    def chat(self, conversation, system_instruction):
+    def chat(
+        self,
+        conversation,
+        system_instruction,
+        registry=None,
+        context=None,
+    ):
 
         try:
+
+            if registry is not None:
+
+                text, used_tool = self.client.generate_with_tools(
+                    conversation,
+                    system_instruction,
+                    registry,
+                    context,
+                )
+
+                return {
+                    "success": True,
+                    "response": text,
+                    "tool_used": used_tool,
+                }
 
             response = self.client.generate(
                 conversation,
@@ -18,6 +39,7 @@ class ChatEngine:
             return {
                 "success": True,
                 "response": response.text,
+                "tool_used": False,
             }
 
         except Exception as e:

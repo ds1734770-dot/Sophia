@@ -9,11 +9,32 @@ class ComputerEngine:
         self.computer = ComputerManager()
         self.parser = CommandParser()
 
+    MAX_ENTITY_WORDS = 4
+
+    @classmethod
+    def _is_compound(cls, entity):
+
+        words = entity.split()
+
+        return (
+            len(words) > cls.MAX_ENTITY_WORDS
+            or any(w in ("and", "then", "also") for w in words)
+        )
+
     # --------------------------------------------------
 
     def execute(self, command, context):
 
         parsed = self.parser.parse(command)
+
+        # Only short, single commands are handled here. Compound or
+        # long requests ("open X and then ...") are left to Gemini.
+        if parsed.action in ("open", "close") and self._is_compound(parsed.entity):
+
+            return {
+                "handled": False,
+                "response": None,
+            }
 
         # --------------------------------------------------
         # OPEN
@@ -85,15 +106,19 @@ class ComputerEngine:
                     "response": "What would you like me to close?",
                 }
 
-            success, response = self.computer.close_app(
-                parsed.entity
-            )
+            # Known app: ask the registry (it asks for confirmation).
+            # Only ask when the app can actually be closed.
+            if self.computer.can_close(parsed.entity):
 
-            if success:
+                result = context.registry.execute(
+                    "close_application",
+                    {"name": parsed.entity},
+                    context,
+                )
 
                 return {
                     "handled": True,
-                    "response": response,
+                    "response": result.message,
                 }
 
             success, response = self.computer.close_folder(

@@ -39,6 +39,21 @@ class BrowserManager:
         except Exception as e:
             return False, str(e)
 
+    def open_url(self, url):
+        """
+        Open any http(s) URL in the default browser.
+        """
+
+        if not url.lower().startswith(("http://", "https://")):
+            return False, "Only http and https links can be opened."
+
+        try:
+            webbrowser.open(url)
+            return True, f"Opening {url}..."
+
+        except Exception as e:
+            return False, str(e)
+
     def open_website(self, website):
         """
         Open a website.

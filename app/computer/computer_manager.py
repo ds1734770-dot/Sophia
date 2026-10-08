@@ -67,6 +67,20 @@ class ComputerManager:
     
         return self.app_manager.open(app_name)
 
+    def can_close(self, app_name):
+        """
+        True if Sophia knows how to close this application.
+        """
+
+        app_name = app_name.lower().strip()
+
+        aliases = {
+            "vs code": "vscode",
+            "visual studio code": "vscode",
+        }
+
+        return aliases.get(app_name, app_name) in self.APPS
+
     def close_app(self, app_name):
 
         app_name = app_name.lower().strip()

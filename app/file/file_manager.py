@@ -1,3 +1,4 @@
+from send2trash import send2trash
 import os
 import shutil
 from pathlib import Path
@@ -96,14 +97,10 @@ class FileManager:
 
         try:
 
-            path = Path(path)
+            # Recycle Bin, so the user can restore it
+            send2trash(str(Path(path)))
 
-            if path.is_dir():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
-
-            return True, "Deleted successfully."
+            return True, "Moved to the Recycle Bin."
 
         except Exception as e:
             return False, str(e)

@@ -2,6 +2,8 @@ from app.brain.engines.chat_engine import ChatEngine
 from app.brain.engines.memory_engine import MemoryEngine
 from app.brain.engines.pending_action_engine import PendingActionEngine
 from app.brain.engines.tool_engine import ToolEngine
+from app.planner.schedule_manager import ScheduleManager
+from app.tools.builtin_tools import build_default_registry
 
 
 
@@ -13,6 +15,16 @@ class Brain:
         self.memory_engine = MemoryEngine()
         self.tool_engine = ToolEngine()
         self.pending_engine = PendingActionEngine()
+
+        # Every action goes through this registry, which enforces
+        # the safety tiers for both local commands and Gemini.
+        self.registry = build_default_registry(
+            computer=self.tool_engine.computer,
+            browser=self.tool_engine.browser,
+            files=self.tool_engine.file_manager,
+            indexer=self.tool_engine.indexer,
+            planner=ScheduleManager(),
+        )
 
 
     # -----------------------------------------------------
@@ -26,6 +38,8 @@ class Brain:
 
             # Original user message
             last_message = conversation[-1]["content"]
+
+            context.registry = self.registry
 
             # -----------------------------------------
             # Intent Processing
@@ -44,7 +58,11 @@ class Brain:
 
             if pending_result["handled"]:
 
-                return pending_result
+                return {
+                    "response": pending_result["response"],
+                    "tool_used": True,
+                    "chat_success": False,
+                }
 
             # -----------------------------------------
             # Tool Engine
@@ -69,12 +87,14 @@ class Brain:
 
             chat_result = self.chat_engine.chat(
                 conversation,
-                system_instruction
+                system_instruction,
+                registry=self.registry,
+                context=context,
             )
 
             return {
                 "response": chat_result["response"],
-                "tool_used": False,
+                "tool_used": chat_result.get("tool_used", False),
                 "chat_success": chat_result["success"],
             }
 
