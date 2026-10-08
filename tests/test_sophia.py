@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 
 import pytest
 
@@ -39,6 +38,17 @@ def sophia(monkeypatch, tmp_path):
         def initialize(self):
             pass
 
+    class FakeReminders:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.started = False
+
+        def start(self):
+            self.started = True
+
+    FakeBrain.planner = FakeBrain.timers = FakeBrain.routines = FakeBrain.fired = None
+
+    monkeypatch.setattr(sophia_module, "ReminderService", FakeReminders)
     monkeypatch.setattr(sophia_module, "Brain", FakeBrain)
     monkeypatch.setattr(sophia_module, "ApplicationManager", FakeApps)
 

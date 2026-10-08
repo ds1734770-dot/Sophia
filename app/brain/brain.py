@@ -13,6 +13,7 @@ from app.file.search import FileSearch
 from app.computer.shell_runner import ShellRunner
 from app.settings.paths import DATA_DIR, LOGS_DIR, PROJECT_ROOT
 from app.tools.notes_store import NoteStore
+from app.planner.reminder_service import FiredStore, RoutineStore, TimerStore
 
 
 
@@ -38,18 +39,24 @@ class Brain:
         self.file_manager = FileManager()
         self.file_search = FileSearch(self.guard)
 
+        self.planner = ScheduleManager()
+        self.timers = TimerStore(DATA_DIR / "timers.json")
+        self.routines = RoutineStore(DATA_DIR / "routines.json")
+        self.fired = FiredStore(DATA_DIR / "fired.json")
+
         self.registry = build_default_registry(
             computer=self.tool_engine.computer,
             browser=self.tool_engine.browser,
             files=self.file_manager,
             search=self.file_search,
-            planner=ScheduleManager(),
+            planner=self.planner,
             system=self.system_controls,
             vision=self.look_at_screen,
             shell=ShellRunner(),
             guard=self.guard,
             audit=AuditLog(LOGS_DIR / "actions.jsonl"),
             notes=NoteStore(DATA_DIR / "notes.json"),
+            reminders=(self.timers, self.routines),
         )
 
 
@@ -149,6 +156,26 @@ class Brain:
             }
 
     # -----------------------------------------------------
+
+    def run_background(self, conversation, system_instruction, context):
+        """
+        Answer a prompt for a routine. Only read-only tools are
+        available, and nothing can ask for confirmation.
+        """
+
+        context.registry = self.registry.safe_only()
+
+        result = self.chat_engine.chat(
+            conversation,
+            system_instruction,
+            registry=context.registry,
+            context=context,
+        )
+
+        if not result["success"]:
+            raise RuntimeError(result["response"])
+
+        return result["response"]
 
     def look_at_screen(self, question):
         """

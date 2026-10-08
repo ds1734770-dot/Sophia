@@ -86,7 +86,7 @@ class FakeSpeaker:
         self.stopped = 0
         self.closed = False
 
-    def say(self, text):
+    def say(self, text, interrupt=True):
         self.said.append(text)
 
     def stop(self):

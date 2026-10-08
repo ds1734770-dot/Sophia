@@ -26,6 +26,7 @@ from app.memory.summarizer import Summarizer
 from app.actions.pending_action_manager import PendingActionManager
 
 from app.computer.background_watcher.watcher_manager import WatcherManager
+from app.planner.reminder_service import ReminderService
 
 log = logging.getLogger("sophia.core")
 
@@ -69,6 +70,18 @@ class Sophia:
         self.application_manager.initialize()
         self.watcher_manager = WatcherManager(self.application_manager)
 
+        # Who to tell when a reminder, timer or routine fires
+        self.notifier = None
+
+        self.reminders = ReminderService(
+            planner=self.brain.planner,
+            timers=self.brain.timers,
+            routines=self.brain.routines,
+            fired=self.brain.fired,
+            notify=self.notify,
+            run_prompt=self.run_background_prompt,
+        )
+
     # -----------------------------------------------------
 
     def start_services(self):
@@ -77,6 +90,7 @@ class Sophia:
         """
 
         self.watcher_manager.start()
+        self.reminders.start()
 
     def start(self):
 
@@ -136,6 +150,29 @@ class Sophia:
 
             log.warning("Memory extraction failed: %s", e)
 
+    def _make_context(self, pending_actions):
+
+        context = ToolContext()
+
+        context.pending_actions = pending_actions
+        context.memory = self.memory
+        context.profile = self.profile
+        context.settings = self.settings
+
+        context.file_manager = self.brain.file_manager
+
+        return context
+
+    @staticmethod
+    def _system_instruction():
+
+        now = datetime.now().strftime("%A, %d %B %Y, %H:%M")
+
+        return (
+            f"Current local date and time: {now}. "
+            "The user is on Windows."
+        )
+
     def generate_response(self):
         """
         Build Sophia's complete context and generate a response.
@@ -147,24 +184,52 @@ class Sophia:
             history=self.memory.get_history()
         )
 
-        context = ToolContext()
-
-        context.pending_actions = self.pending_actions
-        context.memory = self.memory
-        context.profile = self.profile
-        context.settings = self.settings
-
-        context.file_manager = self.brain.file_manager
-
-        now = datetime.now().strftime("%A, %d %B %Y, %H:%M")
-
         return self.brain.chat(
             conversation=conversation,
-            system_instruction=(
-                f"Current local date and time: {now}. "
-                "The user is on Windows."
-            ),
-            context=context
+            system_instruction=self._system_instruction(),
+            context=self._make_context(self.pending_actions)
+        )
+
+    # -----------------------------------------------------
+    # Proactive features
+    # -----------------------------------------------------
+
+    def set_notifier(self, notifier):
+        """
+        notifier(title, text) is called from a background thread when a
+        reminder, timer or routine fires.
+        """
+
+        self.notifier = notifier
+
+    def notify(self, title, text):
+
+        log.info("notify: %s: %s", title, text)
+
+        if self.notifier is not None:
+
+            self.notifier(title, text)
+
+        else:
+
+            print(f"\n[{title}] {text}")
+
+    def run_background_prompt(self, prompt):
+        """
+        Run a routine's request. Separate from the chat: it does not
+        touch the conversation or any pending confirmation.
+        """
+
+        conversation = ContextBuilder.build(
+            profile=self.profile.get_all(),
+            summary="",
+            history=[{"role": "user", "content": prompt}],
+        )
+
+        return self.brain.run_background(
+            conversation,
+            self._system_instruction(),
+            self._make_context(PendingActionManager()),
         )
 
     def process_assistant_response(self, response):

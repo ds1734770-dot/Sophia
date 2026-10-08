@@ -188,6 +188,10 @@ class InputBox(QPlainTextEdit):
 
 class MainWindow(QMainWindow):
 
+    # Reminders arrive on a background thread; the signal moves them
+    # to the UI thread.
+    notified = Signal(str, str)
+
     def __init__(
         self,
         sophia_factory,
@@ -222,6 +226,8 @@ class MainWindow(QMainWindow):
         self._build()
 
         self.tray = self._build_tray() if use_tray else None
+
+        self.notified.connect(self._on_notified)
 
         self._set_ready(False, "Starting...")
 
@@ -383,6 +389,9 @@ class MainWindow(QMainWindow):
 
         self.sophia = sophia
 
+        if hasattr(sophia, "set_notifier"):
+            sophia.set_notifier(lambda title, text: self.notified.emit(title, text))
+
         try:
             sophia.start_services()
 
@@ -479,6 +488,22 @@ class MainWindow(QMainWindow):
         self.send_button.setEnabled(True)
         self.status.setText("Ready")
         self.input.setFocus()
+
+    # ------------------------------------------------
+    # Proactive alerts
+    # ------------------------------------------------
+
+    def _on_notified(self, title, text):
+
+        self.chat.add(f"**{title}**\n\n{text}", "bot")
+
+        if self.tray is not None:
+            self.tray.showMessage(title, text, QSystemTrayIcon.Information, 10000)
+
+        if self.speaker is not None and self.voice_toggle.isChecked():
+            self.speaker.say(f"{title}. {text}", interrupt=False)
+
+        QApplication.alert(self)
 
     # ------------------------------------------------
     # Confirmations

@@ -110,6 +110,21 @@ class ToolRegistry:
 
         return [tool.declaration() for tool in self.tools.values()]
 
+    def safe_only(self):
+        """
+        A registry with just the SAFE-tier tools, for background work
+        (routines) that must never ask or change anything.
+        """
+
+        view = ToolRegistry(audit=self.audit)
+
+        for tool in self.tools.values():
+
+            if tool.risk is Risk.SAFE and tool.risk_fn is None:
+                view.register(tool)
+
+        return view
+
     def trust(self, name):
         """
         Stop asking for this tool for the rest of the session. Only

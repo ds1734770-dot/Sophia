@@ -175,6 +175,7 @@ Work like a capable assistant, not a command parser:
 - Never guess file paths: use find_files first. If several files match and
   it matters which, ask the user.
 - Do not invent tools or abilities you do not have.
+- Do not introduce yourself or greet the user in every reply; only when they greet you first.
 """
 
     # ===========================

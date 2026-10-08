@@ -12,6 +12,7 @@ from app.computer.shell_runner import ShellBlocked, classify
 from app.file.path_guard import PathGuard
 from app.tools.file_tools import register_file_tools
 from app.tools.personal_tools import register_personal_tools
+from app.tools.reminder_tools import register_reminder_tools
 from app.tools.registry import Risk, Tool, ToolBlocked, ToolRegistry
 from app.tools.web_tools import register_web_tools
 
@@ -35,6 +36,7 @@ def build_default_registry(
     notes=None,
     web=None,
     personal=None,
+    reminders=None,
 ):
     """
     Create the registry with every built-in tool.
@@ -405,6 +407,13 @@ def build_default_registry(
         register_personal_tools(
             registry, notes, browser, system=system, **(personal or {})
         )
+
+    # ----------------------------------------------
+    # Timers and routines
+    # ----------------------------------------------
+
+    if reminders is not None:
+        register_reminder_tools(registry, *reminders)
 
     # ----------------------------------------------
     # Shell
