@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
 )
 
 from app.computer.autostart import Autostart
-from app.ui import theme
 from app.ui.car import CarModel, CarWidget, draw_car
 from app.ui.widgets import ChatView, SuggestionChips, collapse, fade_in
 from app.voice.wakeword import spoken_name
@@ -54,26 +53,55 @@ HISTORY_BUBBLES = 12
 MAX_INPUT_LINES = 5
 
 
-def make_icon():
+ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
+
+
+def render_icon(size):
     """
-    The app icon: the little yellow car, drawn in code.
+    The app icon at one size: the yellow car, large, on a dark rounded
+    tile. Each size is drawn separately so it stays sharp when small.
     """
 
     from PySide6.QtCore import QRectF
 
-    pixmap = QPixmap(96, 96)
+    pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
 
     painter = QPainter(pixmap)
-    painter.setBrush(QColor(theme.PANEL))
-    painter.setPen(Qt.NoPen)
-    painter.drawEllipse(2, 2, 92, 92)
+    painter.setRenderHint(QPainter.Antialiasing)
 
-    draw_car(painter, QRectF(6, 26, 84, 40), CarModel(), with_ground=False)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor("#1b1e27"))
+    painter.drawRoundedRect(QRectF(0, 0, size, size), size * 0.22, size * 0.22)
+
+    # the car fills the tile (the drawing is wider than the tile and
+    # clipped by it); its centre sits slightly low
+    width = size * 1.3
+    height = width * 170 / 480
+
+    draw_car(
+        painter,
+        QRectF(-(width - size) / 2 - width * 10 / 480, size * 0.52 - height / 2, width, height),
+        CarModel(),
+        with_ground=False,
+    )
 
     painter.end()
 
-    return QIcon(pixmap)
+    return pixmap
+
+
+def make_icon():
+    """
+    The app, window and tray icon: the little yellow car.
+    """
+
+    icon = QIcon()
+
+    for size in ICON_SIZES:
+        icon.addPixmap(render_icon(size))
+
+    return icon
 
 
 def _default_beep():

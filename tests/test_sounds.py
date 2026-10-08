@@ -25,7 +25,7 @@ def test_every_sound_is_valid_audio():
     all_sounds = render_all()
 
     assert set(all_sounds) == {
-        "entry", "hover", "hide", "exit", "honk", "click", "wiper", "listen", "success",
+        "entry", "hide", "exit", "honk", "click", "wiper", "listen", "success",
     }
 
     for name, samples in all_sounds.items():

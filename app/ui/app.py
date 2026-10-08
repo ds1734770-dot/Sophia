@@ -100,6 +100,16 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
 
     setup_logging()
 
+    # so Windows shows Sophia's own (car) icon in the taskbar, not Python's
+    try:
+
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Sophia.Assistant")
+
+    except Exception:
+        pass
+
     app = QApplication(sys.argv)
     app.setApplicationName("Sophia")
     app.setWindowIcon(make_icon())

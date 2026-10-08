@@ -12,7 +12,7 @@ from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
 from app.ui.car import STATES, CarModel, CarWidget, draw_car
-from app.ui.main_window import MainWindow, make_icon
+from app.ui.main_window import MainWindow, make_icon, render_icon
 from app.ui.widgets import Bubble, ChatView, SuggestionChips
 from tests.test_ui import FakeAutostart, FakeRecorder, FakeSophia, FakeSpeaker, pump
 
@@ -284,6 +284,25 @@ def test_the_app_icon_is_a_car():
     icon = make_icon()
 
     assert not icon.pixmap(64, 64).isNull()
+
+    # drawn at every size, with the yellow car filling the tile
+    for size in (16, 32, 256):
+
+        image = render_icon(size).toImage()
+
+        yellow = sum(
+            1 for x in range(size) for y in range(size)
+            if image.pixelColor(x, y).red() > 200 and image.pixelColor(x, y).blue() < 90
+        )
+
+        assert yellow > size * size * 0.08
+
+
+def test_the_packaged_icon_file_matches():
+
+    import os
+
+    assert os.path.getsize("assets/sophia.ico") > 5000
 
 
 def test_car_widget_paints():

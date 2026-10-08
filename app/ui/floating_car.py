@@ -868,7 +868,6 @@ class FloatingCar(QWidget):
 
         if self.model.hover and not self._was_interacting:
 
-            self._play("hover")
             self.model.kick("wipe")
 
         self._was_interacting = self.model.hover

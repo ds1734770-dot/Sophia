@@ -853,7 +853,7 @@ def test_entering_plays_the_engine_then_a_honk_on_arrival():
     assert pump(app, lambda: "honk" in sounds.played, seconds=4)
 
 
-def test_hovering_revs_once_and_wipes():
+def test_hovering_is_silent_but_still_wipes():
 
     app = qapp()
 
@@ -862,11 +862,11 @@ def test_hovering_revs_once_and_wipes():
 
     mouse.pos = car.mapToGlobal(QPoint(car.lay.width // 2, 50))
 
-    assert pump(app, lambda: "hover" in sounds.played)
+    assert pump(app, lambda: car.interact > 0.9)
 
     pump(app, lambda: False, seconds=0.3)
 
-    assert sounds.played.count("hover") == 1
+    assert sounds.played == []
     assert car.model.wipe_time > 0 or car.model.wiper > 0
 
 

@@ -191,7 +191,6 @@ def render_all(volume=1.0):
 
     rendered = {
         "entry": (entry * swell).astype("float32"),
-        "hover": _fade(engine(0.55, [1000, 2900, 1300], 0.4 * volume), 0.03, 0.15),
         "hide": _fade(engine(0.8, [1300, 3800], 0.5 * volume) * np.linspace(1, 0.05, int(0.8 * SAMPLE_RATE)), 0.02, 0.1),
         "exit": exit_sound.astype("float32"),
         "honk": honk(0.45 * volume),

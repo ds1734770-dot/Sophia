@@ -4,6 +4,7 @@
 #   .\scripts\build.ps1
 
 pyinstaller --noconfirm --clean --windowed --name Sophia `
+    --icon assets\sophia.ico `
     --collect-all faster_whisper `
     --collect-all ctranslate2 `
     --collect-all openwakeword `
