@@ -228,6 +228,11 @@ class MainWindow(QMainWindow):
     # The wake word is heard on the audio thread
     wake_heard = Signal()
 
+    # For the floating orb: a reply (text, asks a question, offers
+    # "always") and short hints such as "I didn't hear anything"
+    replied = Signal(str, bool, bool)
+    hint = Signal(str)
+
     def __init__(
         self,
         sophia_factory,
@@ -260,8 +265,11 @@ class MainWindow(QMainWindow):
         self.confirm_bar = None
         self._quitting = False
 
-        # the living orb
+        # the living orb (more orb widgets, such as the floating one,
+        # can be added to extra_orbs and are animated too)
         self.orb_model = OrbModel()
+        self.extra_orbs = []
+        self.hide_on_close = False
         self._alert_until = 0.0
         self._welcome = True
         self._faded_in = False
@@ -330,6 +338,8 @@ class MainWindow(QMainWindow):
             self.settings.value("voice_replies", False, type=bool)
         )
         self.voice_toggle.toggled.connect(self._on_voice_toggled)
+
+        self._voice_action = None
 
         menu_button = QPushButton("⋯")
         menu_button.setObjectName("icon")
@@ -603,6 +613,15 @@ class MainWindow(QMainWindow):
 
         self._maybe_add_confirm_bar()
 
+        pending = self.sophia.pending_actions.current()
+        asking = pending is not None and pending.exists()
+
+        self.replied.emit(
+            result["response"],
+            asking,
+            bool(asking and getattr(pending, "data", {}).get("always", False)),
+        )
+
         # a little celebration when Sophia did something for the user
         if result.get("tool_used") and self.confirm_bar is None:
             self.orb_model.kick("burst")
@@ -625,6 +644,8 @@ class MainWindow(QMainWindow):
         self.chat.hide_thinking()
 
         self.chat.add(f"Something went wrong: {error}", "bot", animate=True)
+
+        self.replied.emit(f"Something went wrong: {error}", False, False)
 
         self.orb_model.kick("shake")
 
@@ -660,9 +681,12 @@ class MainWindow(QMainWindow):
         model.set_level(level)
 
         # look toward the mouse pointer
-        orb = self.hero_orb if self.hero_orb.isVisible() else self.mini_orb
+        orb = next(
+            (w for w in (self.hero_orb, self.mini_orb, *self.extra_orbs) if w.isVisible()),
+            None,
+        )
 
-        if orb.isVisible():
+        if orb is not None:
 
             center = orb.mapToGlobal(orb.rect().center())
             cursor = QCursor.pos()
@@ -674,7 +698,7 @@ class MainWindow(QMainWindow):
 
         model.step(dt)
 
-        for widget in (self.hero_orb, self.mini_orb):
+        for widget in (self.hero_orb, self.mini_orb, *self.extra_orbs):
 
             if widget.isVisible():
                 widget.update()
@@ -770,6 +794,8 @@ class MainWindow(QMainWindow):
 
         self.chat.add(f"**{title}**\n\n{text}", "bot", animate=True)
 
+        self.replied.emit(f"**{title}**\n\n{text}", False, False)
+
         self._alert_until = getattr(self, "_elapsed", 0.0) + ALERT_SECONDS
         self.orb_model.kick("bounce")
 
@@ -815,6 +841,62 @@ class MainWindow(QMainWindow):
     # Voice
     # ------------------------------------------------
 
+    def voice_toggle_action(self):
+        """
+        A menu action ("Spoken replies") kept in step with the toggle
+        button, for the floating orb's menu.
+        """
+
+        if self._voice_action is None:
+
+            action = QAction("Spoken replies", self)
+            action.setCheckable(True)
+            action.setChecked(self.voice_toggle.isChecked())
+
+            action.toggled.connect(self.voice_toggle.setChecked)
+
+            self.voice_toggle.toggled.connect(
+                lambda on: action.setChecked(on) if action.isChecked() != on else None
+            )
+
+            self._voice_action = action
+
+        return self._voice_action
+
+    def start_voice_turn(self):
+        """
+        Listen for a spoken request (the orb's single click). Clicking
+        again while listening stops early; the answer is spoken.
+        """
+
+        if self.recorder is not None:
+
+            self.toggle_listening()
+
+            return
+
+        if self.sophia is None:
+
+            self.hint.emit("One moment, I'm still starting up.")
+
+            return
+
+        if self.busy:
+
+            self.hint.emit("Still working on that.")
+
+            return
+
+        if self.recorder_factory is None:
+
+            self.hint.emit("Voice isn't available. Open the chat to type.")
+
+            return
+
+        self._voice_turn = True
+
+        self.toggle_listening()
+
     def _on_voice_toggled(self, on):
 
         self.settings.setValue("voice_replies", on)
@@ -848,6 +930,8 @@ class MainWindow(QMainWindow):
             self.recorder = None
             self._voice_turn = False
             self.chat.add(f"I couldn't use the microphone: {e}", "bot")
+
+            self.hint.emit(f"I couldn't use the microphone: {e}")
 
             self._resume_wake_when_quiet()
 
@@ -886,6 +970,8 @@ class MainWindow(QMainWindow):
 
             self.status.setText("I didn't hear anything")
 
+            self.hint.emit("I didn't hear anything. Click and try again.")
+
             self._voice_turn = False
             self._resume_wake_when_quiet()
 
@@ -905,6 +991,8 @@ class MainWindow(QMainWindow):
         if not text:
 
             self.status.setText("I didn't catch that")
+
+            self.hint.emit("I didn't catch that. Click and try again.")
 
             self._voice_turn = False
             self._resume_wake_when_quiet()
@@ -1056,9 +1144,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
 
-        # Closing the window keeps Sophia in the tray so the hotkey
-        # still works; Quit in the menu really exits.
-        if self.tray is not None and not self._quitting:
+        # Closing the window keeps Sophia in the tray (or as the floating
+        # orb) so she stays available; Quit in the menu really exits.
+        if (self.tray is not None or self.hide_on_close) and not self._quitting:
 
             event.ignore()
             self.hide()

@@ -4,6 +4,7 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
+    QSystemTrayIcon,
     QDialog,
     QDialogButtonBox,
     QLabel,
@@ -91,7 +92,7 @@ def create_sophia():
     return Sophia()
 
 
-def run_gui(voice=True, minimized=False):
+def run_gui(voice=True, minimized=False, orb_mode=True):
 
     from app.config.settings import Settings
     from app.logging_setup import setup_logging
@@ -103,6 +104,20 @@ def run_gui(voice=True, minimized=False):
     app.setWindowIcon(make_icon())
     app.setStyleSheet(theme.STYLE)
     app.setQuitOnLastWindowClosed(False)
+
+    # One Sophia at a time (two orbs would fight over the microphone)
+    from PySide6.QtCore import QLockFile
+
+    from app.settings.paths import DATA_DIR
+
+    lock = QLockFile(str(DATA_DIR / "sophia.lock"))
+    lock.setStaleLockTime(5000)
+
+    if not lock.tryLock(200):
+
+        log.info("Sophia is already running")
+
+        return 0
 
     if not ensure_api_key():
         return 0
@@ -147,7 +162,25 @@ def run_gui(voice=True, minimized=False):
         wake_factory=wake_factory,
     )
 
-    hotkey = HotkeyFilter(window.toggle_visibility)
+    orb = controller = None
+
+    if orb_mode:
+
+        from app.ui.floating_orb import FloatingOrb, OrbController
+
+        orb = FloatingOrb(window.orb_model, settings=window.settings)
+        controller = OrbController(window, orb)
+
+        if window.tray is not None:
+            window.tray.activated.disconnect()
+            window.tray.activated.connect(
+                lambda reason: controller.open_chat()
+                if reason == QSystemTrayIcon.Trigger
+                else None
+            )
+
+    # In orb mode the hotkey starts a voice request, like a click
+    hotkey = HotkeyFilter(controller.hotkey if controller else window.toggle_visibility)
 
     label = hotkey.register()
 
@@ -161,12 +194,20 @@ def run_gui(voice=True, minimized=False):
     else:
         log.info("No free global hotkey; use the tray icon instead")
 
-    # Started by Windows at sign-in: stay in the tray until summoned
-    if not (minimized and window.tray is not None):
+    if orb_mode:
+
+        # only the orb appears at first; the chat opens on a triple click
+        orb.show()
+
+    elif not (minimized and window.tray is not None):
+
+        # classic mode; started by Windows at sign-in it stays in the tray
         window.show()
 
     code = app.exec()
 
     hotkey.unregister()
+
+    lock.unlock()
 
     return code

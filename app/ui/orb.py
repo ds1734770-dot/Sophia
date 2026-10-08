@@ -61,6 +61,9 @@ class OrbModel:
 
         self.state = "idle"
 
+        # move mode: the orb is following the pointer
+        self.moving = False
+
         # eased values
         self.color1 = list(hex_to_rgb(PALETTES["idle"][0]))
         self.color2 = list(hex_to_rgb(PALETTES["idle"][1]))
@@ -212,7 +215,7 @@ class OrbModel:
 
         breathing = 0.035 * math.sin(self.breath) * (0.5 + self.energy)
 
-        return 1.0 + breathing + 0.12 * self.level + 0.18 * self.bounce
+        return 1.0 + breathing + 0.12 * self.level + 0.18 * self.bounce + (0.08 if self.moving else 0.0)
 
     @property
     def shake_offset(self):
@@ -334,6 +337,17 @@ class OrbWidget(QWidget):
                     ),
                     side * 0.012, side * 0.012,
                 )
+
+        # move mode: a dashed ring shows the orb is being carried
+        if m.moving:
+
+            ring = QPen(QColor(255, 255, 255, 190), max(1.5, side * 0.014))
+            ring.setStyle(Qt.DashLine)
+
+            painter.setPen(ring)
+            painter.setBrush(Qt.NoBrush)
+
+            painter.drawEllipse(center, radius * 1.22, radius * 1.22)
 
         # the orb
         body = QRadialGradient(

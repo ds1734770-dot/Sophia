@@ -31,6 +31,7 @@ def main():
         run_gui(
             voice="--no-voice" not in sys.argv,
             minimized="--minimized" in sys.argv,
+            orb_mode="--chat" not in sys.argv,
         )
     )
 

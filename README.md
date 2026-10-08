@@ -25,6 +25,15 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 
 ## The interface
 
+Sophia starts as just a floating orb, always on top of your other windows:
+
+- **1 click:** listen. Speak your request; click again to stop early. The answer is spoken and shown in a small bubble beside the orb (questions get Yes / No / Always allow buttons right there).
+- **2 clicks:** move mode. The orb follows your pointer with a dashed ring; click once to drop it. Its position is remembered.
+- **3 clicks:** open the full chat, docked beside the orb.
+- **Right-click:** menu (open chat, talk, spoken replies, hands-free, reset position, quit). The orb never takes keyboard focus, so it will not interrupt what you are typing elsewhere.
+
+Sophia can launch any program on your PC (she shows the path, whether it is signed, and whether it was downloaded; one "Always allow" covers the session), open any folder, and look at and operate anything visible on your screen. Use `python main.py --chat` for the classic chat window instead of the orb.
+
 Sophia is a living orb. It breathes when idle, ripples with your voice while listening, orbits while thinking, pulses while speaking, sparkles when it finishes a task, shakes on an error, and its highlight follows your mouse pointer. The welcome screen offers tap-to-send ideas and folds up into the header after your first message; replies are typed out word by word. Click the orb to talk, double-click it to stop Sophia speaking.
 
 ## How it decides what to do
@@ -63,7 +72,8 @@ python main.py
 On first start Sophia asks for a Gemini API key (free at https://aistudio.google.com/apikey). For development you can put `GEMINI_API_KEY` in a `.env` file instead (see `.env.example`).
 
 ```powershell
-python main.py              # desktop window
+python main.py              # floating orb (click to talk, 2 clicks to move, 3 clicks for chat)
+python main.py --chat       # classic chat window
 python main.py --cli        # text-only console
 python main.py --no-voice   # without microphone and speech
 ```
