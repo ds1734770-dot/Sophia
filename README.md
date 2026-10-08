@@ -104,7 +104,7 @@ Environment variables or `.env`:
 | --- | --- | --- |
 | `GEMINI_API_KEY` | (Credential Manager) | API key |
 | `MODEL_NAME` | `gemini-3.5-flash` | Main model |
-| `FALLBACK_MODELS` | `gemini-3-flash-preview,gemini-3.1-flash-lite` | Used when the main model is out of quota |
+| `FALLBACK_MODELS` | `gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.1-flash-lite` | Used when the main model is out of quota |
 | `LIGHT_MODEL` | `gemini-3.1-flash-lite` | Memory extraction and summaries |
 | `REQUEST_TIMEOUT` | `30` | Seconds before a request is given up |
 | `WHISPER_MODEL` | `base.en` | Local speech model (`tiny.en` is smaller and faster) |
