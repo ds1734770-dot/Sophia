@@ -124,6 +124,33 @@ QLineEdit {{
 }}
 QLineEdit:focus {{ border: 1px solid {ACCENT}; }}
 
+QFrame#hero {{
+    background: transparent;
+}}
+QLabel#hero_title {{
+    font-size: 26px;
+    font-weight: 600;
+    background: transparent;
+}}
+QLabel#hero_subtitle {{
+    color: {MUTED};
+    font-size: 14px;
+    background: transparent;
+}}
+
+QPushButton#chip {{
+    background: {INPUT_BG};
+    border: 1px solid {BORDER};
+    border-radius: 16px;
+    padding: 7px 14px;
+    color: {TEXT};
+}}
+QPushButton#chip:hover {{
+    border: 1px solid {ACCENT};
+    background: #232838;
+}}
+QPushButton#chip:pressed {{ background: {ACCENT}; color: white; }}
+
 QMenu {{
     background: {PANEL};
     border: 1px solid {BORDER};

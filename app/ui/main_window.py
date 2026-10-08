@@ -1,6 +1,8 @@
 import logging
+import math
 
 from PySide6.QtCore import (
+    QElapsedTimer,
     QObject,
     QRunnable,
     QSize,
@@ -10,7 +12,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QCursor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -27,12 +29,27 @@ from PySide6.QtWidgets import (
 
 from app.computer.autostart import Autostart
 from app.ui import theme
-from app.ui.widgets import ChatView
+from app.ui.orb import OrbModel, OrbWidget
+from app.ui.widgets import ChatView, SuggestionChips, collapse, fade_in
 from app.voice.wakeword import spoken_name
 
 log = logging.getLogger("sophia.ui")
 
-GREETING = "Hi, I'm Sophia. Ask me anything, or tell me what to do on your computer."
+WELCOME_TITLE = "Hi, I'm Sophia"
+WELCOME_SUBTITLE = "Ask me anything, or tell me what to do on your computer."
+
+SUGGESTIONS = [
+    "What can you do?",
+    "Weather today",
+    "Open YouTube",
+    "Timer for 10 minutes",
+    "How's my computer doing?",
+]
+
+FRAME_MS = 16
+HERO_ORB = 190
+MINI_ORB = 56
+ALERT_SECONDS = 1.6
 HISTORY_BUBBLES = 12
 MAX_INPUT_LINES = 5
 
@@ -243,6 +260,12 @@ class MainWindow(QMainWindow):
         self.confirm_bar = None
         self._quitting = False
 
+        # the living orb
+        self.orb_model = OrbModel()
+        self._alert_until = 0.0
+        self._welcome = True
+        self._faded_in = False
+
         self.setWindowTitle("Sophia")
         self.setWindowIcon(make_icon())
         self.resize(760, 780)
@@ -254,6 +277,14 @@ class MainWindow(QMainWindow):
 
         self.notified.connect(self._on_notified)
         self.wake_heard.connect(self._on_wake)
+
+        # animation clock for the orb
+        self._clock = QElapsedTimer()
+        self._clock.start()
+
+        self._frame_timer = QTimer(self)
+        self._frame_timer.timeout.connect(self._tick)
+        self._frame_timer.start(FRAME_MS)
 
         self._set_ready(False, "Starting...")
 
@@ -277,7 +308,13 @@ class MainWindow(QMainWindow):
         header.setObjectName("header")
 
         head = QHBoxLayout(header)
-        head.setContentsMargins(18, 12, 12, 12)
+        head.setContentsMargins(18, 8, 12, 8)
+
+        # small orb: appears once the welcome screen has collapsed
+        self.mini_orb = OrbWidget(self.orb_model, MINI_ORB)
+        self.mini_orb.clicked.connect(self._on_orb_clicked)
+        self.mini_orb.double_clicked.connect(self._on_orb_double_clicked)
+        self.mini_orb.hide()
 
         title = QLabel("Sophia")
         title.setObjectName("title")
@@ -299,6 +336,7 @@ class MainWindow(QMainWindow):
         menu_button.setToolTip("Menu")
         menu_button.setMenu(self._build_menu())
 
+        head.addWidget(self.mini_orb)
         head.addWidget(title)
         head.addSpacing(10)
         head.addWidget(self.status)
@@ -333,7 +371,38 @@ class MainWindow(QMainWindow):
         row.addWidget(self.mic, 0, Qt.AlignBottom)
         row.addWidget(self.send_button, 0, Qt.AlignBottom)
 
+        # welcome screen: a big orb, a greeting and ideas to tap
+        self.hero = QFrame()
+        self.hero.setObjectName("hero")
+
+        hero_layout = QVBoxLayout(self.hero)
+        hero_layout.setContentsMargins(24, 14, 24, 14)
+        hero_layout.setSpacing(6)
+
+        self.hero_orb = OrbWidget(self.orb_model, HERO_ORB)
+        self.hero_orb.clicked.connect(self._on_orb_clicked)
+        self.hero_orb.double_clicked.connect(self._on_orb_double_clicked)
+
+        hero_title = QLabel(WELCOME_TITLE)
+        hero_title.setObjectName("hero_title")
+        hero_title.setAlignment(Qt.AlignCenter)
+
+        hero_subtitle = QLabel(WELCOME_SUBTITLE)
+        hero_subtitle.setObjectName("hero_subtitle")
+        hero_subtitle.setAlignment(Qt.AlignCenter)
+        hero_subtitle.setWordWrap(True)
+
+        self.chips = SuggestionChips(SUGGESTIONS)
+        self.chips.chosen.connect(self._on_chip)
+
+        hero_layout.addWidget(self.hero_orb, 0, Qt.AlignHCenter)
+        hero_layout.addWidget(hero_title)
+        hero_layout.addWidget(hero_subtitle)
+        hero_layout.addSpacing(8)
+        hero_layout.addWidget(self.chips)
+
         outer.addWidget(header)
+        outer.addWidget(self.hero)
         outer.addWidget(self.chat, 1)
         outer.addWidget(composer)
 
@@ -440,15 +509,14 @@ class MainWindow(QMainWindow):
 
         if history:
 
+            # a returning user goes straight to the conversation
+            self._leave_welcome(animate=False)
+
             for message in history:
                 self.chat.add(
                     message["content"],
                     "user" if message["role"] == "user" else "bot",
                 )
-
-        else:
-
-            self.chat.add(GREETING)
 
         self._set_ready(True, "Ready")
 
@@ -459,6 +527,10 @@ class MainWindow(QMainWindow):
             self.hands_free_action.setChecked(True)
 
     def _on_start_failed(self, error):
+
+        self._leave_welcome(animate=False)
+
+        self.orb_model.kick("shake")
 
         self.chat.add(
             f"Sophia could not start: {error}\n\nSee data/logs/sophia.log.",
@@ -492,8 +564,10 @@ class MainWindow(QMainWindow):
         if self.speaker is not None:
             self.speaker.stop()
 
+        self._leave_welcome()
+
         if show_user:
-            self.chat.add(text, "user")
+            self.chat.add(text, "user", animate=True)
 
         self.busy = True
         self.send_button.setEnabled(False)
@@ -506,9 +580,16 @@ class MainWindow(QMainWindow):
 
         self.chat.hide_thinking()
 
-        self.chat.add(result["response"], "bot")
+        self.chat.add(result["response"], "bot", animate=True, typing=True)
 
         self._maybe_add_confirm_bar()
+
+        # a little celebration when Sophia did something for the user
+        if result.get("tool_used") and self.confirm_bar is None:
+            self.orb_model.kick("burst")
+
+        elif self.confirm_bar is not None:
+            self.orb_model.kick("bounce")
 
         # Spoken replies when asked to, and always after a spoken request
         if self.speaker is not None and (
@@ -524,7 +605,9 @@ class MainWindow(QMainWindow):
 
         self.chat.hide_thinking()
 
-        self.chat.add(f"Something went wrong: {error}", "bot")
+        self.chat.add(f"Something went wrong: {error}", "bot", animate=True)
+
+        self.orb_model.kick("shake")
 
         self._voice_turn = False
 
@@ -540,12 +623,136 @@ class MainWindow(QMainWindow):
         self._resume_wake_when_quiet()
 
     # ------------------------------------------------
+    # The living orb
+    # ------------------------------------------------
+
+    def _tick(self):
+
+        dt = self._clock.restart() / 1000
+
+        # restart() resets the clock, so keep absolute time ourselves
+        self._elapsed = getattr(self, "_elapsed", 0.0) + dt
+
+        state, level = self._orb_state_at(self._elapsed)
+
+        model = self.orb_model
+
+        model.set_state(state)
+        model.set_level(level)
+
+        # look toward the mouse pointer
+        orb = self.hero_orb if self.hero_orb.isVisible() else self.mini_orb
+
+        if orb.isVisible():
+
+            center = orb.mapToGlobal(orb.rect().center())
+            cursor = QCursor.pos()
+
+            model.look_at(
+                (cursor.x() - center.x()) / 450,
+                (cursor.y() - center.y()) / 450,
+            )
+
+        model.step(dt)
+
+        for widget in (self.hero_orb, self.mini_orb):
+
+            if widget.isVisible():
+                widget.update()
+
+    def _orb_state_at(self, now):
+
+        if now < self._alert_until:
+            return "alert", 0.0
+
+        if self.recorder is not None:
+            return "listening", float(getattr(self.recorder, "level", 0.0) or 0.0)
+
+        if self.busy or self.sophia is None:
+            return "thinking", 0.0
+
+        speaking = getattr(self.speaker, "speaking", None)
+
+        if speaking is not None and speaking.is_set():
+
+            wave = 0.5 + 0.3 * math.sin(now * 9.0) + 0.2 * math.sin(now * 15.7 + 1.3)
+
+            return "speaking", max(0.15, min(1.0, wave))
+
+        return "idle", 0.0
+
+    def _on_orb_clicked(self):
+
+        if self.sophia is not None:
+            self.toggle_listening()
+
+    def _on_orb_double_clicked(self):
+
+        if self.speaker is not None:
+            self.speaker.stop()
+
+        self.orb_model.kick("bounce")
+
+    def _on_chip(self, text):
+
+        self.send(text)
+
+    def _leave_welcome(self, animate=True):
+        """
+        Collapse the welcome screen into the header (the big orb shrinks
+        away and the small one fades in).
+        """
+
+        if not self._welcome:
+            return
+
+        self._welcome = False
+
+        if not animate:
+
+            self.hero.hide()
+            self.mini_orb.show()
+
+            return
+
+        def finished():
+
+            self.mini_orb.show()
+            fade_in(self.mini_orb, 400)
+
+        collapse(self.hero, 480, on_done=finished)
+
+    def showEvent(self, event):
+
+        super().showEvent(event)
+
+        # a soft entrance the first time the window appears
+        if not self._faded_in:
+
+            self._faded_in = True
+
+            from PySide6.QtCore import QPropertyAnimation
+
+            self.setWindowOpacity(0.0)
+
+            animation = QPropertyAnimation(self, b"windowOpacity", self)
+            animation.setDuration(380)
+            animation.setStartValue(0.0)
+            animation.setEndValue(1.0)
+            animation.start()
+
+            self._entrance = animation
+
+    # ------------------------------------------------
     # Proactive alerts
     # ------------------------------------------------
 
     def _on_notified(self, title, text):
 
-        self.chat.add(f"**{title}**\n\n{text}", "bot")
+        self.chat.add(f"**{title}**\n\n{text}", "bot", animate=True)
+
+        self._alert_until = getattr(self, "_elapsed", 0.0) + ALERT_SECONDS
+        self.orb_model.kick("bounce")
 
         if self.tray is not None:
             self.tray.showMessage(title, text, QSystemTrayIcon.Information, 10000)

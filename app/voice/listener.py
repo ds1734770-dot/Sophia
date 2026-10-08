@@ -38,6 +38,7 @@ class Recorder:
         self._stream = None
         self._heard_speech = False
         self._quiet_samples = 0
+        self.level = 0.0
 
         self.finished = threading.Event()
 
@@ -78,7 +79,12 @@ class Recorder:
 
         self._chunks.append(chunk)
 
-        loud = float(np.sqrt(np.mean(chunk ** 2))) > self.threshold
+        rms = float(np.sqrt(np.mean(chunk ** 2)))
+
+        # smoothed loudness for the on-screen orb (0 to 1)
+        self.level = min(1.0, rms * 12)
+
+        loud = rms > self.threshold
 
         if loud:
 

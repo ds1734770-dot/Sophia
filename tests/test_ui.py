@@ -161,9 +161,11 @@ def test_starts_with_a_greeting_and_starts_services(qapp):
     window, sophia = make_window(qapp)
 
     assert sophia.started
-    assert bubbles(window)[0][0] == "bot"
-    assert "Sophia" in bubbles(window)[0][1]
     assert window.send_button.isEnabled()
+
+    # a new user sees the welcome screen, not an empty chat
+    assert not window.hero.isHidden()
+    assert bubbles(window) == []
 
 
 def test_recent_history_is_shown(qapp):

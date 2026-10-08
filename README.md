@@ -23,6 +23,10 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 | Voice | Click the mic, or say "Hey Jarvis" in hands-free mode; natural spoken replies |
 | Integrations | Plugins and MCP servers add email, calendar, GitHub, Spotify and more (see below) |
 
+## The interface
+
+Sophia is a living orb. It breathes when idle, ripples with your voice while listening, orbits while thinking, pulses while speaking, sparkles when it finishes a task, shakes on an error, and its highlight follows your mouse pointer. The welcome screen offers tap-to-send ideas and folds up into the header after your first message; replies are typed out word by word. Click the orb to talk, double-click it to stop Sophia speaking.
+
 ## How it decides what to do
 
 Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. A few exact commands ("open notepad", "what time is it", "12*(5+8)") are answered locally and instantly without using any AI quota; anything vague goes to Gemini.

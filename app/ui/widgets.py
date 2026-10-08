@@ -1,6 +1,17 @@
-from PySide6.QtCore import QTimer, Qt, Signal
+import math
+import re
+
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPropertyAnimation,
+    QTimer,
+    Qt,
+    Signal,
+)
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -12,13 +23,111 @@ from PySide6.QtWidgets import (
 
 BUBBLE_WIDTH_RATIO = 0.78
 
+# Typing reveal: words added per tick (every REVEAL_MS) by reply length
+REVEAL_MS = 22
+LONG_REPLY_CHARS = 700
+
+
+def fade_in(widget, duration=260):
+    """
+    Fade a widget in. The animation is kept on the widget so it is not
+    garbage collected.
+    """
+
+    effect = QGraphicsOpacityEffect(widget)
+    effect.setOpacity(0.0)
+
+    widget.setGraphicsEffect(effect)
+
+    animation = QPropertyAnimation(effect, b"opacity", widget)
+    animation.setDuration(duration)
+    animation.setStartValue(0.0)
+    animation.setEndValue(1.0)
+    animation.setEasingCurve(QEasingCurve.OutCubic)
+
+    # drop the effect afterwards: it makes text rendering softer
+    animation.finished.connect(lambda: widget.setGraphicsEffect(None))
+
+    animation.start()
+
+    widget._fade = animation
+
+    return animation
+
+
+def collapse(widget, duration=420, on_done=None):
+    """
+    Animate a widget's height to zero, then hide it.
+    """
+
+    widget.setMinimumHeight(0)
+
+    animation = QPropertyAnimation(widget, b"maximumHeight", widget)
+    animation.setDuration(duration)
+    animation.setStartValue(widget.height())
+    animation.setEndValue(0)
+    animation.setEasingCurve(QEasingCurve.InOutCubic)
+
+    def done():
+
+        widget.hide()
+
+        if on_done is not None:
+            on_done()
+
+    animation.finished.connect(done)
+    animation.start()
+
+    widget._collapse = animation
+
+    return animation
+
+
+class ThinkingDots(QWidget):
+    """
+    Three dots that bounce in a wave.
+    """
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setFixedSize(46, 22)
+
+        self._phase = 0.0
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(30)
+
+    def _tick(self):
+
+        self._phase += 0.22
+        self.update()
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        for i in range(3):
+
+            lift = max(0.0, math.sin(self._phase - i * 0.9))
+
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(139, 146, 165, int(120 + 135 * lift)))
+
+            painter.drawEllipse(8 + i * 15 - 3, int(11 - 6 * lift) - 3, 7, 7)
+
+        painter.end()
+
 
 class Bubble(QFrame):
     """
     One chat message. role: "user", "bot" or "note".
     """
 
-    def __init__(self, text, role="bot"):
+    def __init__(self, text, role="bot", dots=False):
 
         super().__init__()
 
@@ -39,15 +148,83 @@ class Bubble(QFrame):
 
         layout.addWidget(self.label)
 
-        self.set_text(text)
+        self._full = ""
+        self._timer = None
+
+        self.dots = None
+
+        if dots:
+
+            self.dots = ThinkingDots()
+            layout.addWidget(self.dots)
+            self.label.hide()
+
+        else:
+
+            self.set_text(text)
+
+    # ------------------------------------------------
 
     def set_text(self, text):
 
+        self._stop_reveal()
+
+        self._full = text
         self.label.setText(text)
 
     def text(self):
+        """
+        The whole message, even while it is still being revealed.
+        """
 
-        return self.label.text()
+        return self._full
+
+    def reveal(self, text):
+        """
+        Show the text word by word, like it is being typed.
+        """
+
+        self._stop_reveal()
+
+        self._full = text
+
+        words = re.findall(r"\S+\s*", text)
+
+        if len(words) < 3:
+
+            self.label.setText(text)
+
+            return
+
+        step = 1 if len(text) < LONG_REPLY_CHARS else max(2, len(words) // 60)
+
+        self._shown = 0
+        self._words = words
+        self._step = step
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._reveal_more)
+        self._timer.start(REVEAL_MS)
+
+        self._reveal_more()
+
+    def _reveal_more(self):
+
+        self._shown = min(len(self._words), self._shown + self._step)
+
+        self.label.setText("".join(self._words[:self._shown]))
+
+        if self._shown >= len(self._words):
+
+            self._stop_reveal()
+            self.label.setText(self._full)
+
+    def _stop_reveal(self):
+
+        if self._timer is not None:
+
+            self._timer.stop()
+            self._timer = None
 
     def fit(self, max_width):
         """
@@ -58,12 +235,15 @@ class Bubble(QFrame):
         metrics = self.label.fontMetrics()
 
         widest = max(
-            (metrics.horizontalAdvance(line) for line in self.label.text().split("\n")),
+            (metrics.horizontalAdvance(line) for line in self._full.split("\n")),
             default=0,
         )
 
         # padding, plus room for list bullets and bold text
         wanted = widest + 28 + 36
+
+        if self.dots is not None:
+            wanted = 76
 
         self.setFixedWidth(max(60, min(max_width, wanted)))
 
@@ -106,6 +286,38 @@ class ConfirmBar(QWidget):
         self.buttons = (yes, no)
 
 
+class SuggestionChips(QWidget):
+    """
+    Tap-to-send ideas shown on the welcome screen.
+    """
+
+    chosen = Signal(str)
+
+    def __init__(self, suggestions):
+
+        super().__init__()
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addStretch()
+
+        self.buttons = []
+
+        for text in suggestions:
+
+            button = QPushButton(text)
+            button.setObjectName("chip")
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(lambda _=False, t=text: self.chosen.emit(t))
+
+            layout.addWidget(button)
+
+            self.buttons.append(button)
+
+        layout.addStretch()
+
+
 class ChatView(QScrollArea):
     """
     Scrolling list of messages.
@@ -129,10 +341,6 @@ class ChatView(QScrollArea):
 
         self._rows = []
         self._thinking = None
-        self._dots = 0
-
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._animate)
 
         # keep the view pinned to the newest message
         self.verticalScrollBar().rangeChanged.connect(self._stick_to_bottom)
@@ -143,7 +351,7 @@ class ChatView(QScrollArea):
 
         self.verticalScrollBar().setValue(maximum)
 
-    def _insert(self, widget, align):
+    def _insert(self, widget, align, animate=False):
 
         row = QWidget()
 
@@ -164,6 +372,9 @@ class ChatView(QScrollArea):
         self._rows.append(row)
 
         self._limit_width(widget)
+
+        if animate:
+            fade_in(row)
 
         return row
 
@@ -190,11 +401,20 @@ class ChatView(QScrollArea):
 
     # ------------------------------------------------
 
-    def add(self, text, role="bot"):
+    def add(self, text, role="bot", animate=False, typing=False):
+        """
+        Add a message. animate fades it in; typing (bot replies) also
+        reveals the text word by word.
+        """
 
-        bubble = Bubble(text, role)
+        bubble = Bubble("" if typing else text, role)
 
-        self._insert(bubble, "right" if role == "user" else "left")
+        self._insert(bubble, "right" if role == "user" else "left", animate)
+
+        if typing:
+
+            bubble.reveal(text)
+            bubble.fit(max(240, int(self.viewport().width() * BUBBLE_WIDTH_RATIO)))
 
         return bubble
 
@@ -202,7 +422,7 @@ class ChatView(QScrollArea):
 
         bar = ConfirmBar(allow_always)
 
-        self._insert(bar, "left")
+        self._insert(bar, "left", animate=True)
 
         return bar
 
@@ -232,22 +452,15 @@ class ChatView(QScrollArea):
 
         if self._thinking is None:
 
-            self._thinking = self.add("...", "bot")
-            self._dots = 0
-            self._timer.start(350)
+            bubble = Bubble("", "bot", dots=True)
+
+            self._insert(bubble, "left", animate=True)
+
+            self._thinking = bubble
 
     def hide_thinking(self):
-
-        self._timer.stop()
 
         if self._thinking is not None:
 
             self.remove_widget(self._thinking)
             self._thinking = None
-
-    def _animate(self):
-
-        self._dots = (self._dots + 1) % 4
-
-        if self._thinking is not None:
-            self._thinking.set_text("." * max(1, self._dots))
