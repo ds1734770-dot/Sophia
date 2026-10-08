@@ -23,3 +23,8 @@ Thumbs.db
 # Personal runtime data (history, profile, file index, app index)
 data/
 summary.json
+
+# Build output
+build/
+dist/
+*.spec
