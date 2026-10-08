@@ -30,12 +30,33 @@ def load_wake_model(name):
     The openwakeword model, downloading its small file on first use.
     """
 
+    import glob
+    import os
+
     from openwakeword.model import Model
     from openwakeword.utils import download_models
 
-    download_models(model_names=[name])
+    from app.settings.paths import DATA_DIR
 
-    return Model(wakeword_models=[name], inference_framework="onnx")
+    # Kept in Sophia's data folder: the install folder may be read-only
+    folder = DATA_DIR / "models"
+
+    folder.mkdir(parents=True, exist_ok=True)
+
+    found = glob.glob(str(folder / f"{name}*.onnx"))
+
+    if not found:
+
+        download_models(model_names=[name], target_directory=str(folder))
+
+        found = glob.glob(str(folder / f"{name}*.onnx"))
+
+    return Model(
+        wakeword_models=[found[0]],
+        inference_framework="onnx",
+        melspec_model_path=os.path.join(folder, "melspectrogram.onnx"),
+        embedding_model_path=os.path.join(folder, "embedding_model.onnx"),
+    )
 
 
 def open_input_stream(callback):
