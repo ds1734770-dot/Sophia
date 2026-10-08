@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 import os
 
+from app.config.secrets import get_stored_api_key
+
 load_dotenv()
 
 DEFAULT_MODEL = "gemini-3.5-flash"
@@ -12,6 +14,9 @@ DEFAULT_FALLBACK_MODELS = "gemini-3-flash-preview,gemini-3.1-flash-lite"
 # Cheap model for background work (memory extraction, summaries).
 DEFAULT_LIGHT_MODEL = "gemini-3.1-flash-lite"
 
+# Local speech recognition (downloaded once on first use)
+DEFAULT_WHISPER_MODEL = "base.en"
+
 
 class Settings:
     def __init__(self):
@@ -21,7 +26,10 @@ class Settings:
         self.debug = (os.getenv("DEBUG") or "").lower() in ("1", "true", "yes")
 
         # AI
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.gemini_api_key = (
+            os.getenv("GEMINI_API_KEY") or get_stored_api_key()
+        )
+        self.whisper_model = os.getenv("WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
         self.model_name = os.getenv("MODEL_NAME") or DEFAULT_MODEL
         self.fallback_models = [
             m.strip()

@@ -1,12 +1,13 @@
 import sys
 
 from app.logging_setup import setup_logging
-from app.sophia import Sophia
 
 
-def main():
+def run_cli():
 
-    # Emoji in the banner crash legacy Windows code pages.
+    from app.sophia import Sophia
+
+    # Emoji in replies crash legacy Windows code pages.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
@@ -16,6 +17,17 @@ def main():
     assistant = Sophia()
     assistant.start()
     assistant.chat()
+
+
+def main():
+
+    if "--cli" in sys.argv:
+        run_cli()
+        return
+
+    from app.ui.app import run_gui
+
+    sys.exit(run_gui(voice="--no-voice" not in sys.argv))
 
 
 if __name__ == "__main__":
