@@ -9,6 +9,8 @@ class PendingActionEngine:
 
     YES = {"yes", "y", "yeah", "yep", "sure", "ok", "okay", "confirm", "do it", "go ahead"}
 
+    ALWAYS = {"always", "yes always", "yes, always", "always allow", "always yes"}
+
     NO = {"no", "n", "nope", "cancel", "stop", "don't", "dont"}
 
     def process(self, command, context):
@@ -28,10 +30,14 @@ class PendingActionEngine:
 
             tool = pending.data["tool"]
             args = pending.data["args"]
+            pending_data_always = pending.data.get("always", False)
 
             context.pending_actions.clear()
 
-            if answer in self.YES:
+            if answer in self.YES or answer in self.ALWAYS:
+
+                if answer in self.ALWAYS and pending_data_always:
+                    context.registry.trust(tool)
 
                 result = context.registry.execute(
                     tool, args, context, confirmed=True

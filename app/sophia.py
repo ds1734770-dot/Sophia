@@ -154,8 +154,7 @@ class Sophia:
         context.profile = self.profile
         context.settings = self.settings
 
-        context.file_manager = self.brain.tool_engine.file_manager
-        context.file_indexer = self.brain.tool_engine.indexer
+        context.file_manager = self.brain.file_manager
 
         now = datetime.now().strftime("%A, %d %B %Y, %H:%M")
 

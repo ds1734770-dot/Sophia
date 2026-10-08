@@ -286,7 +286,7 @@ def registry_env(monkeypatch, tmp_path):
 
     registry = build_default_registry(
         computer=Computer(), browser=Stub(), files=Stub(),
-        indexer=Stub(), planner=Stub(), system=controls,
+        search=Stub(), planner=Stub(), system=controls,
     )
 
     context = ToolContext()
@@ -462,7 +462,7 @@ def test_look_at_screen_needs_confirmation_then_asks_vision(registry_env, tmp_pa
     asked = []
 
     registry = build_default_registry(
-        computer=Stub(), browser=Stub(), files=Stub(), indexer=Stub(), planner=Stub(),
+        computer=Stub(), browser=Stub(), files=Stub(), search=Stub(), planner=Stub(),
         vision=lambda question: asked.append(question) or "a terminal showing an error",
     )
 

@@ -23,7 +23,7 @@ class ComputerEngine:
 
     # --------------------------------------------------
 
-    def execute(self, command, context):
+    def execute(self, command, context, offline=False):
 
         parsed = self.parser.parse(command)
 
@@ -48,8 +48,12 @@ class ComputerEngine:
                     "response": "What would you like me to open?",
                 }
 
+            # Normally only an exact app name is opened here; a vague
+            # name is left to Gemini, which can think about whether the
+            # user means an app, a website or a file.
             success, app_response = self.computer.open_app(
-                parsed.entity
+                parsed.entity,
+                strict=not offline,
             )
 
             if success:
@@ -68,6 +72,13 @@ class ComputerEngine:
                 return {
                     "handled": True,
                     "response": response,
+                }
+
+            if not offline:
+
+                return {
+                    "handled": False,
+                    "response": None,
                 }
 
             # Keep the "Did you mean ..." suggestions
@@ -107,8 +118,8 @@ class ComputerEngine:
                 }
 
             # Known app: ask the registry (it asks for confirmation).
-            # Only ask when the app can actually be closed.
-            if self.computer.can_close(parsed.entity):
+            # Other names are left to Gemini, unless it is offline.
+            if self.computer.can_close(parsed.entity, strict=not offline):
 
                 result = context.registry.execute(
                     "close_application",
@@ -132,7 +143,7 @@ class ComputerEngine:
                     "response": response,
                 }
 
-            if len(parsed.entity.split()) > 3:
+            if not offline or len(parsed.entity.split()) > 3:
 
                 return {
                     "handled": False,

@@ -90,6 +90,25 @@ class FileManager:
             return False, str(e)
 
     # ----------------------------
+    # Copy
+    # ----------------------------
+
+    def copy(self, source, destination):
+
+        try:
+
+            if Path(source).is_dir():
+                shutil.copytree(source, destination)
+
+            else:
+                shutil.copy2(source, destination)
+
+            return True, f"Copied to {destination}."
+
+        except Exception as e:
+            return False, str(e)
+
+    # ----------------------------
     # Delete
     # ----------------------------
 

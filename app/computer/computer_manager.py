@@ -53,7 +53,7 @@ class ComputerManager:
     # Applications
     # -------------------------------------------------
 
-    def open_app(self, app_name):
+    def open_app(self, app_name, strict=False):
 
         app_name = app_name.lower().strip()
     
@@ -64,7 +64,7 @@ class ComputerManager:
     
         app_name = aliases.get(app_name, app_name)
     
-        return self.app_manager.open(app_name)
+        return self.app_manager.open(app_name, strict=strict)
 
     ALIASES = {
         "vs code": "vscode",
@@ -103,10 +103,17 @@ class ComputerManager:
         # Store apps and the like: fall back to what is running now
         return name or self.window_manager.guess_process(app_name)
 
-    def can_close(self, app_name):
+    def can_close(self, app_name, strict=False):
         """
-        True if Sophia can work out which program to close.
+        True if Sophia can work out which program to close. In strict
+        mode only the built-in list of well-known apps counts.
         """
+
+        if strict:
+
+            name = self.ALIASES.get(app_name.lower().strip(), app_name.lower().strip())
+
+            return name in self.APPS
 
         return self.resolve_process(app_name) is not None
 

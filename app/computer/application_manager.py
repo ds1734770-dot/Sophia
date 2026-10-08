@@ -108,13 +108,24 @@ class ApplicationManager:
 
     # ----------------------------------------------------
 
-    def open(self, app_name):
+    # An exact name, alias or prefix scores at least this much;
+    # fuzzy and semantic guesses score below it.
+    STRICT_SCORE = 800
+
+    def open(self, app_name, strict=False):
 
         matches = self._rank(app_name)
 
         if not matches:
 
             return False, "No matching application found."
+
+        if strict and (
+            matches[0].score < self.STRICT_SCORE
+            or not self.confidence.confident(matches)
+        ):
+
+            return False, "No exact application match."
 
         # ----------------------------------------
         # Confidence Evaluation

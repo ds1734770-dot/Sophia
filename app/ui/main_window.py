@@ -491,7 +491,9 @@ class MainWindow(QMainWindow):
         if pending is None or not pending.exists():
             return
 
-        bar = self.chat.add_confirm_bar()
+        bar = self.chat.add_confirm_bar(
+            allow_always=getattr(pending, "data", {}).get("always", False)
+        )
 
         bar.answered.connect(self._on_confirm_answer)
 

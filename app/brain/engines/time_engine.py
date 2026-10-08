@@ -25,7 +25,7 @@ class TimeEngine:
         r"|today'?s date|date|the date|current date)$"
     )
 
-    def execute(self, command, context):
+    def execute(self, command, context, offline=False):
 
         text = re.sub(r"[?!.,]", "", command.lower()).strip()
         text = re.sub(r"\s+", " ", text)

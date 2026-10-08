@@ -7,10 +7,13 @@ or a local command triggers it) goes through ToolRegistry.execute, so a
 risky action can never skip its confirmation step.
 """
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
 from google.genai import types
+
+log = logging.getLogger("sophia.tools")
 
 
 class Risk(Enum):
@@ -24,6 +27,13 @@ class Risk(Enum):
     DANGEROUS = "dangerous"
 
 
+class ToolBlocked(Exception):
+    """
+    Raised by a tool's risk_fn when the request must be refused
+    outright. The message is shown to the user.
+    """
+
+
 @dataclass
 class Tool:
     name: str
@@ -35,6 +45,13 @@ class Tool:
 
     # Builds the sentence shown when confirmation is needed
     preview: object = None
+
+    # Optional: decides the tier from the arguments (may raise
+    # ToolBlocked). Overrides `risk`.
+    risk_fn: object = None
+
+    # May the user answer "always" so it stops asking this session?
+    trustable: bool = True
 
     def declaration(self):
 
@@ -69,9 +86,15 @@ class ToolResult:
 
 class ToolRegistry:
 
-    def __init__(self):
+    def __init__(self, audit=None):
 
         self.tools = {}
+
+        # Tools the user said "always" to, for this session only
+        self.trusted = set()
+
+        # Optional callable(name, args, result, confirmed) for the log
+        self.audit = audit
 
     # ------------------------------------------------
 
@@ -87,12 +110,29 @@ class ToolRegistry:
 
         return [tool.declaration() for tool in self.tools.values()]
 
+    def trust(self, name):
+        """
+        Stop asking for this tool for the rest of the session. Only
+        CONFIRM-tier tools marked trustable can be trusted; dangerous
+        ones always ask.
+        """
+
+        tool = self.tools.get(name)
+
+        if tool is None or not tool.trustable or tool.risk is not Risk.CONFIRM:
+            return False
+
+        self.trusted.add(name)
+
+        return True
+
     # ------------------------------------------------
 
     def execute(self, name, args, context, confirmed=False):
         """
         Run a tool. Tools above the SAFE tier are held back as a pending
-        confirmation unless `confirmed` is True.
+        confirmation unless `confirmed` is True (or the user trusted the
+        tool for this session).
         """
 
         tool = self.tools.get(name)
@@ -118,9 +158,28 @@ class ToolRegistry:
                 f"Unexpected argument(s): {', '.join(unexpected)}.",
             )
 
-        if tool.risk is not Risk.SAFE and not confirmed:
+        try:
 
-            return self._ask_confirmation(tool, args, context)
+            risk = tool.risk_fn(args) if tool.risk_fn else tool.risk
+
+        except ToolBlocked as e:
+
+            result = ToolResult(False, str(e))
+
+            self._audit(name, args, result, confirmed)
+
+            return result
+
+        if (
+            risk is Risk.CONFIRM
+            and tool.trustable
+            and name in self.trusted
+        ):
+            confirmed = True
+
+        if risk is not Risk.SAFE and not confirmed:
+
+            return self._ask_confirmation(tool, risk, args, context)
 
         try:
 
@@ -128,31 +187,64 @@ class ToolRegistry:
 
         except Exception as e:
 
-            return ToolResult(False, f"{tool.name} failed: {e}")
+            log.exception("Tool %s failed", name)
+
+            result = ToolResult(False, f"{tool.name} failed: {e}")
+
+            self._audit(name, args, result, confirmed)
+
+            return result
 
         if isinstance(outcome, tuple):
             ok, message = outcome
-            return ToolResult(bool(ok), str(message))
+            result = ToolResult(bool(ok), str(message))
 
-        return ToolResult(True, str(outcome))
+        else:
+            result = ToolResult(True, str(outcome))
+
+        self._audit(name, args, result, confirmed)
+
+        return result
 
     # ------------------------------------------------
 
-    def _ask_confirmation(self, tool, args, context):
+    def _audit(self, name, args, result, confirmed):
+
+        if self.audit is None:
+            return
+
+        try:
+            self.audit(name, args, result, confirmed)
+
+        except Exception:
+            log.exception("Audit log failed")
+
+    def _ask_confirmation(self, tool, risk, args, context):
 
         prompt = tool.describe(args)
 
-        if tool.risk is Risk.DANGEROUS:
+        if risk is Risk.DANGEROUS:
             prompt = f"Warning: {prompt}"
 
         context.pending_actions.start(
             action="confirm",
             matches=[],
-            data={"tool": tool.name, "args": args},
+            data={
+                "tool": tool.name,
+                "args": args,
+                "always": (
+                    risk is Risk.CONFIRM
+                    and tool.trustable
+                    and tool.risk is Risk.CONFIRM
+                ),
+            },
         )
 
-        return ToolResult(
-            True,
-            f"{prompt}\n\nReply 'yes' to confirm or 'no' to cancel.",
-            needs_confirmation=True,
+        options = (
+            "Reply 'yes' to confirm, 'always' to stop asking for this "
+            "kind of action this session, or 'no' to cancel."
+            if context.pending_actions.current().data["always"]
+            else "Reply 'yes' to confirm or 'no' to cancel."
         )
+
+        return ToolResult(True, f"{prompt}\n\n{options}", needs_confirmation=True)

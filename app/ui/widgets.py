@@ -75,7 +75,7 @@ class ConfirmBar(QWidget):
 
     answered = Signal(str)
 
-    def __init__(self):
+    def __init__(self, allow_always=False):
 
         super().__init__()
 
@@ -91,6 +91,15 @@ class ConfirmBar(QWidget):
         no.clicked.connect(lambda: self.answered.emit("no"))
 
         layout.addWidget(yes)
+
+        if allow_always:
+
+            always = QPushButton("Always allow")
+            always.setToolTip("Stop asking for this kind of action until Sophia restarts")
+            always.clicked.connect(lambda: self.answered.emit("always"))
+
+            layout.addWidget(always)
+
         layout.addWidget(no)
         layout.addStretch()
 
@@ -189,9 +198,9 @@ class ChatView(QScrollArea):
 
         return bubble
 
-    def add_confirm_bar(self):
+    def add_confirm_bar(self, allow_always=False):
 
-        bar = ConfirmBar()
+        bar = ConfirmBar(allow_always)
 
         self._insert(bar, "left")
 

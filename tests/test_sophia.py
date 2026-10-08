@@ -20,7 +20,7 @@ def sophia(monkeypatch, tmp_path):
     class FakeBrain:
         def __init__(self):
             self.replies = []
-            self.tool_engine = SimpleNamespace(file_manager=None, indexer=None)
+            self.file_manager = None
             self.extracted = []
 
         def chat(self, conversation, system_instruction, context):

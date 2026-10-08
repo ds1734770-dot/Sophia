@@ -6,6 +6,12 @@ from app.planner.schedule_manager import ScheduleManager
 from app.prompts.prompt_manager import PromptManager
 from app.computer.system_controls import SystemControls
 from app.tools.builtin_tools import build_default_registry
+from app.tools.audit import AuditLog
+from app.file.file_manager import FileManager
+from app.file.path_guard import PathGuard
+from app.file.search import FileSearch
+from app.computer.shell_runner import ShellRunner
+from app.settings.paths import LOGS_DIR, PROJECT_ROOT
 
 
 
@@ -26,14 +32,22 @@ class Brain:
         # the safety tiers for both local commands and Gemini.
         self.system_controls = SystemControls()
 
+        # Sophia may not change her own folder
+        self.guard = PathGuard(protected=[PROJECT_ROOT])
+        self.file_manager = FileManager()
+        self.file_search = FileSearch(self.guard)
+
         self.registry = build_default_registry(
             computer=self.tool_engine.computer,
             browser=self.tool_engine.browser,
-            files=self.tool_engine.file_manager,
-            indexer=self.tool_engine.indexer,
+            files=self.file_manager,
+            search=self.file_search,
             planner=ScheduleManager(),
             system=self.system_controls,
             vision=self.look_at_screen,
+            shell=ShellRunner(),
+            guard=self.guard,
+            audit=AuditLog(LOGS_DIR / "actions.jsonl"),
         )
 
 
@@ -101,6 +115,22 @@ class Brain:
                 registry=self.registry,
                 context=context,
             )
+
+            if not chat_result["success"]:
+
+                # The AI is unreachable: simple commands can still work
+                offline_result = self.tool_engine.process_offline(
+                    last_message,
+                    context
+                )
+
+                if offline_result["handled"]:
+
+                    return {
+                        "response": offline_result["response"],
+                        "tool_used": True,
+                        "chat_success": False,
+                    }
 
             return {
                 "response": chat_result["response"],

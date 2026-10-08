@@ -70,7 +70,7 @@ def safe_eval(expression):
 
 class CalculatorEngine:
 
-    def execute(self, command, context):
+    def execute(self, command, context, offline=False):
 
         command = command.strip()
 

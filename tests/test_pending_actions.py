@@ -118,3 +118,37 @@ def test_no_pending_action_means_nothing_handled():
     context, _ = make_context()
 
     assert not PendingActionEngine().process("yes", context)["handled"]
+
+
+def test_always_trusts_the_tool_for_the_session():
+
+    context, calls = make_context()
+
+    first = ask(context)
+
+    assert "always" in first.message.lower()
+
+    result = PendingActionEngine().process("always", context)
+
+    assert result == {"handled": True, "response": "wiped x"}
+    assert calls == ["x"]
+
+    # no more questions for this tool
+    again = ask(context)
+
+    assert not again.needs_confirmation
+    assert calls == ["x", "x"]
+
+
+def test_always_is_ignored_for_dangerous_tools():
+
+    context, calls = make_context(Risk.DANGEROUS)
+
+    first = ask(context)
+
+    assert "always" not in first.message.lower()
+
+    PendingActionEngine().process("always", context)
+
+    assert calls == ["x"]
+    assert ask(context).needs_confirmation

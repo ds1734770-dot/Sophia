@@ -16,4 +16,3 @@ class ToolContext:
         # NEW
         self.file_manager = None
 
-        self.file_indexer = None
