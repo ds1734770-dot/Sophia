@@ -1,3 +1,6 @@
+import contextlib
+
+
 class Summarizer:
     """
     Keeps long conversations affordable: once the history grows past
@@ -14,21 +17,28 @@ class Summarizer:
         self.trigger = trigger
         self.keep = keep
 
-    def maybe_summarize(self, memory, summary):
+    def maybe_summarize(self, memory, summary, lock=None):
         """
         Returns True if the history was compacted.
+
+        The (slow) summary request runs without `lock`, so a new message
+        can arrive meanwhile; it is kept when the history is swapped.
         """
 
-        history = memory.get_history()
+        lock = lock or contextlib.nullcontext()
 
-        if len(history) <= self.trigger:
-            return False
+        with lock:
 
-        old = history[:-self.keep]
-        recent = history[-self.keep:]
+            history = memory.get_history()
+
+            if len(history) <= self.trigger:
+                return False
+
+            old = history[:-self.keep]
+            summary_so_far = summary.get()
 
         try:
-            text = self.summarize(summary.get(), old)
+            text = self.summarize(summary_so_far, old)
 
         except Exception:
             return False
@@ -36,7 +46,15 @@ class Summarizer:
         if not text or not text.strip():
             return False
 
-        summary.set(text.strip())
-        memory.load(list(recent))
+        with lock:
+
+            current = memory.get_history()
+
+            # messages added while the summary was being written
+            if current[:len(history)] != history:
+                return False
+
+            summary.set(text.strip())
+            memory.load(list(history[-self.keep:]) + list(current[len(history):]))
 
         return True

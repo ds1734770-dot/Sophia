@@ -1,3 +1,4 @@
+import re
 import threading
 
 from app.computer.application_indexer import ApplicationIndexer
@@ -9,6 +10,13 @@ from app.computer.search.application_ranker import ApplicationRanker
 from app.computer.search.confidence_evaluator import ConfidenceEvaluator
 
 from app.computer.semantic.semantic_index import SemanticIndex
+
+
+# Entries that are components, not programs a person opens
+NOISE_NAME = re.compile(
+    r"(uninstall|runtime|webview2|redistributable|readme|release notes|cert kit)",
+    re.IGNORECASE,
+)
 
 
 class ApplicationManager:
@@ -90,6 +98,15 @@ class ApplicationManager:
         with self._lock:
             applications = merge_builtin(self.indexer.load())
 
+        # installers' leftovers are never what the user means, unless
+        # they ask for them by that word
+        wanted = app_name.lower()
+
+        applications = [
+            a for a in applications
+            if not NOISE_NAME.search(a.get("name", "")) or NOISE_NAME.search(wanted)
+        ]
+
         applications = self.semantic.build(applications)
 
         return self.ranker.rank(applications, app_name)
@@ -109,8 +126,8 @@ class ApplicationManager:
     # ----------------------------------------------------
 
     # An exact name, alias or prefix scores at least this much;
-    # fuzzy and semantic guesses score below it.
-    STRICT_SCORE = 800
+    # fuzzy and semantic guesses score well below it (under 200).
+    STRICT_SCORE = 600
 
     def open(self, app_name, strict=False):
 

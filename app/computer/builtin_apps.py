@@ -13,6 +13,7 @@ BUILTIN_APPS = [
     ("Task Manager", "taskmgr.exe", ["task manager", "taskmgr"]),
     ("Snipping Tool", "snippingtool.exe", ["snipping tool", "snip"]),
     ("Control Panel", "control.exe", ["control panel"]),
+    ("Windows Terminal", "wt.exe", ["terminal", "windows terminal"]),
 ]
 
 # Opened through the shell instead of as a program

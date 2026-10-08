@@ -1,5 +1,6 @@
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from app.brain.tool_context import ToolContext
@@ -19,6 +20,8 @@ from app.memory.conversation_summary import ConversationSummary
 from app.memory.summary_storage import SummaryStorage
 
 from app.context.context_builder import ContextBuilder
+from app.context.system_profile import system_profile
+from app.computer.builtin_apps import merge_builtin
 
 from app.memory.memory_filter import MemoryFilter
 from app.memory.summarizer import Summarizer
@@ -46,6 +49,10 @@ class Sophia:
 
         # One message at a time, whichever front end sent it
         self._turn_lock = threading.Lock()
+
+        # Slow housekeeping (summaries, remembering facts) runs after the
+        # reply is shown, one job at a time
+        self._after_turn = ThreadPoolExecutor(max_workers=1, thread_name_prefix="after-turn")
 
         # Conversation Memory
         self.memory = Memory()
@@ -164,15 +171,27 @@ class Sophia:
 
         return context
 
-    @staticmethod
-    def _system_instruction():
+    def _system_instruction(self):
 
         now = datetime.now().strftime("%A, %d %B %Y, %H:%M")
 
-        return (
+        text = (
             f"Current local date and time: {now}. "
             "The user is on Windows."
         )
+
+        try:
+
+            manager = self.brain.tool_engine.computer.app_manager
+
+            text += "\n" + system_profile(
+                lambda: merge_builtin(manager.indexer.load())
+            )
+
+        except Exception:
+            log.debug("System profile unavailable", exc_info=True)
+
+        return text
 
     def generate_response(self):
         """
@@ -233,7 +252,31 @@ class Sophia:
             self._make_context(PendingActionManager()),
         )
 
-    def process_assistant_response(self, response):
+    def _housekeeping(self, user_input, result):
+
+        try:
+
+            self.compact_history()
+
+            # Only extract memory if NO tool was used
+            if (not result["tool_used"]) and result["chat_success"]:
+                self.update_profile(user_input)
+
+        except Exception:
+            log.exception("Housekeeping failed")
+
+    def wait_idle(self, timeout=30):
+        """
+        Block until background housekeeping is done (for tests and exit).
+        """
+
+        done = threading.Event()
+
+        self._after_turn.submit(done.set)
+
+        done.wait(timeout)
+
+    def process_assistant_response(self, response, compact=True):
         """
         Save Sophia's response.
         """
@@ -243,7 +286,8 @@ class Sophia:
             response
         )
 
-        self.compact_history()
+        if compact:
+            self.compact_history()
 
         MemoryStorage.save(
             self.memory.get_history()
@@ -257,7 +301,9 @@ class Sophia:
 
         try:
 
-            if self.summarizer.maybe_summarize(self.memory, self.summary):
+            if self.summarizer.maybe_summarize(
+                self.memory, self.summary, lock=self._turn_lock
+            ):
 
                 SummaryStorage.save(self.summary.get())
 
@@ -299,11 +345,11 @@ class Sophia:
                 result["chat_success"],
             )
 
-            self.process_assistant_response(result["response"])
+            self.process_assistant_response(result["response"], compact=False)
 
-            # Only extract memory if NO tool was used
-            if (not result["tool_used"]) and result["chat_success"]:
-                self.update_profile(user_input)
+        # Housekeeping can take as long as an AI request: the reply is
+        # returned first and this runs in the background.
+        self._after_turn.submit(self._housekeeping, user_input, result)
 
         return {
             "response": result["response"],
