@@ -84,6 +84,15 @@ class ToolResult:
     needs_confirmation: bool = False
 
 
+# Tools that only look things up: several can run at the same moment
+PARALLEL_SAFE = frozenset({
+    "get_current_time", "calculate", "web_search", "read_webpage", "get_weather",
+    "find_files", "list_directory", "read_file", "list_memories", "get_schedule",
+    "list_notes", "list_todos", "list_timers", "list_routines", "system_status",
+    "list_integrations", "clipboard_read",
+})
+
+
 class ToolRegistry:
 
     def __init__(self, audit=None):
@@ -110,6 +119,20 @@ class ToolRegistry:
 
         # a copy: integrations may add tools while a request is built
         return [tool.declaration() for tool in list(self.tools.values())]
+
+    def is_safe(self, name, args=None):
+        """
+        Is this a read-only lookup that may run alongside others?
+        """
+
+        tool = self.tools.get(name)
+
+        return (
+            tool is not None
+            and name in PARALLEL_SAFE
+            and tool.risk is Risk.SAFE
+            and tool.risk_fn is None
+        )
 
     def safe_only(self):
         """

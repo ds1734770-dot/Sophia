@@ -139,6 +139,7 @@ def make_client(monkeypatch, script, primary="main", fallbacks=("backup", "lite"
 
     monkeypatch.setattr(module.genai, "Client", FakeGenaiClient)
     monkeypatch.setattr(module.time, "sleep", lambda s: None)
+    monkeypatch.setattr(module.GeminiClient, "_http", {})
 
     client = module.GeminiClient()
     client.chain = [primary, *fallbacks]

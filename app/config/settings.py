@@ -52,6 +52,9 @@ class Settings:
             if m.strip()
         ]
         self.light_model = os.getenv("LIGHT_MODEL") or DEFAULT_LIGHT_MODEL
+        # How hard the model thinks before answering: "minimal", "low",
+        # "medium", "high", or "" to leave it to the model. Lower is faster.
+        self.thinking_level = (os.getenv("THINKING_LEVEL") or "low").strip().lower()
         self.request_timeout = int(
             os.getenv("REQUEST_TIMEOUT") or DEFAULT_TIMEOUT_SECONDS
         )

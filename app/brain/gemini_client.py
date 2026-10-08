@@ -21,15 +21,27 @@ class GeminiClient:
     # One pool per process, so cooldowns are shared by every client
     _pool = None
 
+    # One HTTP client per process: building it costs about a second
+    _http = {}
+
     def __init__(self):
         self.settings = Settings()
 
-        self.client = genai.Client(
-            api_key=self.settings.gemini_api_key,
-            http_options=types.HttpOptions(
-                timeout=self.settings.request_timeout * 1000
-            ),
-        )
+        key = (self.settings.gemini_api_key, self.settings.request_timeout)
+
+        if key not in GeminiClient._http:
+
+            GeminiClient._http[key] = genai.Client(
+                api_key=self.settings.gemini_api_key,
+                http_options=types.HttpOptions(
+                    timeout=self.settings.request_timeout * 1000
+                ),
+            )
+
+        self.client = GeminiClient._http[key]
+
+        # models that rejected the thinking setting
+        self.no_thinking = set()
 
         self.chain = [self.settings.model_name] + self.settings.fallback_models
 
@@ -55,6 +67,38 @@ class GeminiClient:
 
         return list(dict.fromkeys(order))
 
+    def _attempt(self, model, contents, config):
+        """
+        One request to one model, asking for quick answers: little
+        thinking time is what makes a Gemini reply fast, and Sophia's
+        tasks rarely need more. A model that rejects the setting is
+        asked again without it (and remembered).
+        """
+
+        level = self.settings.thinking_level
+
+        if level and model not in self.no_thinking:
+
+            config.thinking_config = types.ThinkingConfig(thinking_level=level)
+
+            try:
+                return self.client.models.generate_content(
+                    model=model, contents=contents, config=config
+                )
+
+            except Exception as e:
+
+                if "thinking" not in str(e).lower():
+                    raise
+
+                self.no_thinking.add(model)
+
+        config.thinking_config = None
+
+        return self.client.models.generate_content(
+            model=model, contents=contents, config=config
+        )
+
     def _call(self, contents, config, light=False):
         """
         One generate_content request. If a model is out of quota or down,
@@ -71,11 +115,7 @@ class GeminiClient:
 
                 try:
 
-                    response = self.client.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=config,
-                    )
+                    response = self._attempt(model, contents, config)
 
                 except Exception as e:
 
@@ -186,11 +226,9 @@ class GeminiClient:
 
             results = []
 
-            for call in calls:
+            outcomes = self._run_calls(calls, registry, context)
 
-                result = registry.execute(
-                    call.name, call.args, context
-                )
+            for call, result in zip(calls, outcomes):
 
                 if result.needs_confirmation:
                     return result.message, True
@@ -212,6 +250,35 @@ class GeminiClient:
             "Could you break it into smaller requests?",
             used_tool,
         )
+
+    @staticmethod
+    def _run_calls(calls, registry, context):
+        """
+        Run the tool calls of one model turn. Read-only calls (searches,
+        page reads, status checks) run side by side, which is much faster
+        when Gemini asks for several at once; anything that changes
+        something runs alone, in order.
+        """
+
+        def safe(call):
+
+            try:
+                return registry.is_safe(call.name, call.args)
+
+            except Exception:
+                return False
+
+        if len(calls) < 2 or not all(safe(c) for c in calls):
+
+            return [registry.execute(c.name, c.args, context) for c in calls]
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(4, len(calls))) as pool:
+
+            return list(
+                pool.map(lambda c: registry.execute(c.name, c.args, context), calls)
+            )
 
     def describe_image(self, question, image_bytes, mime_type="image/png"):
         """

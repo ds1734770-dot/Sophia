@@ -55,6 +55,7 @@ def make(monkeypatch, replies, risk=Risk.SAFE):
             self.models = models
 
     monkeypatch.setattr(module.genai, "Client", FakeGenaiClient)
+    monkeypatch.setattr(module.GeminiClient, "_http", {})
 
     ran = []
 
@@ -167,3 +168,63 @@ def test_tool_loop_is_bounded(monkeypatch):
     assert used
     assert "smaller requests" in text
     assert len(models.requests) == client.MAX_TOOL_STEPS
+
+
+def test_thinking_setting_is_dropped_when_a_model_rejects_it(monkeypatch):
+
+    from app.brain.gemini_client import GeminiClient
+
+    seen = []
+
+    class Models:
+        def generate_content(self, model, contents, config):
+            seen.append(config.thinking_config)
+            if config.thinking_config is not None:
+                raise RuntimeError("400 INVALID_ARGUMENT: thinking level is not supported")
+            return model_reply("hi")
+
+    class FakeGenaiClient:
+        def __init__(self, **kwargs):
+            self.models = Models()
+
+    monkeypatch.setattr(module.genai, "Client", FakeGenaiClient)
+    monkeypatch.setattr(module.GeminiClient, "_http", {})
+
+    client = GeminiClient()
+
+    assert client.generate([{"role": "user", "content": "x"}], "").text == "hi"
+    assert seen[0] is not None and seen[1] is None
+    assert client.no_thinking == {'main'} or len(client.no_thinking) == 1
+
+
+def test_read_only_calls_run_together_and_in_order(monkeypatch):
+
+    import threading
+    import time as _time
+
+    from app.brain.gemini_client import GeminiClient
+
+    started = []
+    overlap = []
+
+    def slow(context, query):
+        started.append(query)
+        _time.sleep(0.2)
+        overlap.append(len(started))
+        return True, query.upper()
+
+    registry = ToolRegistry()
+    registry.register(Tool(
+        name="web_search", description="s",
+        parameters={"query": {"type": "string"}}, required=["query"],
+        handler=slow,
+    ))
+
+    calls = [function_call("web_search", {"query": q}) for q in ("a", "b", "c")]
+
+    t = _time.time()
+    results = GeminiClient._run_calls(calls, registry, ToolContext())
+
+    assert [r.message for r in results] == ["A", "B", "C"]
+    assert _time.time() - t < 0.5
+    assert max(overlap) == 3
