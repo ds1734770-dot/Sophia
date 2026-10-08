@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (
 
 from app.computer.autostart import Autostart
 from app.ui.car import CarModel, CarWidget, draw_car
-from app.ui.widgets import ChatView, SuggestionChips, collapse, fade_in
+from app.ui.activity import describe_step
+from app.ui.widgets import ChatView, StatusPill, SuggestionChips, collapse, fade_in
 from app.voice.wakeword import spoken_name
 
 log = logging.getLogger("sophia.ui")
@@ -44,7 +45,10 @@ SUGGESTIONS = [
     "Open YouTube",
     "Timer for 10 minutes",
     "How's my computer doing?",
+    "Latest news",
 ]
+
+SUGGESTION_ICONS = ["✨", "⛅", "▶", "⏱", "💻", "📰"]
 
 FRAME_MS = 16
 HERO_CAR = (220, 78)
@@ -222,7 +226,7 @@ class InputBox(QPlainTextEdit):
         super().__init__()
 
         self.setObjectName("input")
-        self.setPlaceholderText("Message Sophia...")
+        self.setPlaceholderText("Ask Sophia anything, or tell her what to do...")
         self.textChanged.connect(self._resize)
 
         self._resize()
@@ -243,7 +247,7 @@ class InputBox(QPlainTextEdit):
 
         lines = min(MAX_INPUT_LINES, max(1, self.document().blockCount()))
 
-        height = self.fontMetrics().lineSpacing() * lines + 22
+        height = self.fontMetrics().lineSpacing() * lines + 34
 
         self.setFixedHeight(height)
 
@@ -267,6 +271,9 @@ class MainWindow(QMainWindow):
 
     # Text of Sophia's answer as Gemini writes it (from a worker thread)
     partial = Signal(str)
+
+    # A tool started or finished (from a worker thread): a dict
+    tool_event = Signal(object)
 
     # For the floating orb: a reply (text, asks a question, offers
     # "always") and short hints such as "I didn't hear anything"
@@ -305,6 +312,7 @@ class MainWindow(QMainWindow):
         self.recorder = None
         self.confirm_bar = None
         self._stream = None
+        self._steps = None
         self._quitting = False
 
         # the car shown in the chat window; the floating car has its own
@@ -329,6 +337,7 @@ class MainWindow(QMainWindow):
         self.notified.connect(self._on_notified)
         self.wake_heard.connect(self._on_wake)
         self.partial.connect(self._on_partial)
+        self.tool_event.connect(self._on_tool_event)
 
         # animation clock for the orb
         self._clock = QElapsedTimer()
@@ -369,8 +378,14 @@ class MainWindow(QMainWindow):
         title = QLabel("Sophia")
         title.setObjectName("title")
 
-        self.status = QLabel("")
-        self.status.setObjectName("status")
+        badge = QLabel("AGENT")
+        badge.setObjectName("badge")
+        badge.setToolTip("Sophia can act on your computer, with your permission")
+
+        self.status = StatusPill("")
+
+        # her mark beside every message
+        self.chat.avatar_pixmap = render_icon(64)
 
         self.voice_toggle = QPushButton("\U0001F50A")
         self.voice_toggle.setObjectName("icon")
@@ -390,7 +405,9 @@ class MainWindow(QMainWindow):
 
         head.addWidget(self.mini_orb)
         head.addWidget(title)
-        head.addSpacing(10)
+        head.addSpacing(6)
+        head.addWidget(badge)
+        head.addSpacing(12)
         head.addWidget(self.status)
         head.addStretch()
         head.addWidget(self.voice_toggle)
@@ -428,7 +445,7 @@ class MainWindow(QMainWindow):
         self.hero.setObjectName("hero")
 
         hero_layout = QVBoxLayout(self.hero)
-        hero_layout.setContentsMargins(24, 14, 24, 14)
+        hero_layout.setContentsMargins(70, 14, 70, 14)
         hero_layout.setSpacing(6)
 
         self.hero_orb = CarWidget(self.orb_model, *HERO_CAR)
@@ -442,7 +459,7 @@ class MainWindow(QMainWindow):
         hero_subtitle.setAlignment(Qt.AlignCenter)
         hero_subtitle.setWordWrap(True)
 
-        self.chips = SuggestionChips(SUGGESTIONS)
+        self.chips = SuggestionChips(SUGGESTIONS, SUGGESTION_ICONS)
         self.chips.chosen.connect(self._on_chip)
 
         hero_layout.addWidget(self.hero_orb, 0, Qt.AlignHCenter)
@@ -580,6 +597,12 @@ class MainWindow(QMainWindow):
 
         self._set_screen_confirm(self.screen_confirm_action.isChecked())
 
+        # live progress: each tool Sophia runs appears as a step
+        registry = getattr(getattr(sophia, "brain", None), "registry", None)
+
+        if registry is not None and hasattr(registry, "observers"):
+            registry.observers.append(self.tool_event.emit)
+
         # Remember hands-free across restarts
         # Hands-free is on by default: Sophia answers to her wake word
         # whenever she is running, even with the car hidden
@@ -646,6 +669,7 @@ class MainWindow(QMainWindow):
         self.chat.show_thinking()
 
         self._stream = {"bubble": None, "text": "", "spoken": 0}
+        self._steps = None
 
         run_task(
             self.sophia.respond,
@@ -670,6 +694,8 @@ class MainWindow(QMainWindow):
 
         if stream is None or not self.busy:
             return
+
+        self._complete_steps()
 
         if stream["bubble"] is None:
 
@@ -698,9 +724,49 @@ class MainWindow(QMainWindow):
 
                 stream["spoken"] += match.end()
 
+    def _on_tool_event(self, event):
+        """
+        Show what Sophia is doing as she does it.
+        """
+
+        if not self.busy:
+            return
+
+        if self._steps is None:
+
+            # the steps card replaces the waiting dots
+            self.chat.hide_thinking()
+
+            self._steps = self.chat.add_steps()
+
+            self.status.setText("Working...")
+
+        key = event["token"]
+
+        if event["phase"] == "start":
+
+            icon, text = describe_step(event["name"], event["args"])
+
+            self._steps.add(key, icon, text)
+
+        else:
+
+            self._steps.finish(
+                key, event["ok"], event["seconds"],
+                "" if event["ok"] else str(event.get("message", ""))[:200],
+            )
+
+    def _complete_steps(self):
+
+        if self._steps is not None:
+
+            self._steps.complete()
+
     def _on_reply(self, result):
 
         self.chat.hide_thinking()
+
+        self._complete_steps()
 
         stream = getattr(self, "_stream", None) or {"bubble": None}
 
@@ -761,6 +827,8 @@ class MainWindow(QMainWindow):
 
         self.chat.hide_thinking()
 
+        self._complete_steps()
+
         self.chat.add(f"Something went wrong: {error}", "bot", animate=True)
 
         self.replied.emit(f"Something went wrong: {error}", False, False)
@@ -772,6 +840,8 @@ class MainWindow(QMainWindow):
         self._finish_turn()
 
     def _finish_turn(self):
+
+        self._steps = None
 
         self.busy = False
         self.send_button.setEnabled(True)

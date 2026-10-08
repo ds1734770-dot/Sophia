@@ -45,7 +45,7 @@ python main.py --chat     # classic chat window instead
 - **Sound effects** (generated in code, no files): engine arriving (nothing plays when you hover), a honk when it parks, a wiper swish, button clicks, a chime when listening starts and another when a task succeeds, a rev-and-launch when it leaves. Right-click > Sound effects mutes them; `SOUND_VOLUME` (0 to 1) sets the level. Preview them all with `python -m app.ui.sounds` (add a folder name to also save them as .wav files).
 - **Right-click** the car for a menu (open chat, talk, hide, spoken replies, hands-free, reset position, quit). The car never takes keyboard focus, so it will not interrupt what you are typing elsewhere.
 
-The welcome screen in the chat window shows the car too, with tap-to-send ideas; it folds into the header after your first message and replies are typed out word by word.
+The chat window has an agent look: a dark surface with the car's amber accent, Sophia's mark beside each of her messages, a status pill (idle, working, listening, problem), and **live steps**: while she works, a card lists each action as it happens ("Opening Notepad", "Checking the weather in Vizag") with a spinner, a tick or a cross and its time, then folds into "Used 3 actions" (click to reopen; failures stay open). Hover a reply to copy it. The welcome screen shows the car with tap-to-send idea cards and folds away after your first message; answers stream in as Gemini writes them.
 
 Sophia can launch any program on your PC (she shows the path, whether it is signed and whether it was downloaded; one "Always allow" covers the session), open any folder, and look at and operate anything visible on your screen.
 

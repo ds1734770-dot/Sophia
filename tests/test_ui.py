@@ -416,3 +416,129 @@ def test_streamed_text_is_not_spoken_when_voice_is_off(qapp):
     assert pump(qapp, lambda: not window.busy)
 
     assert speaker.said == []
+
+
+# ---------------------------------------------------------------
+# Agent look: live steps, status pill, activity wording
+# ---------------------------------------------------------------
+
+def tool_event(window, phase, token, name, args=None, ok=True, seconds=0.0):
+
+    window.tool_event.emit({
+        "phase": phase, "token": token, "name": name, "args": args or {},
+        "ok": ok, "message": "", "seconds": seconds,
+    })
+
+
+def test_tool_runs_appear_as_live_steps_and_fold_when_done(qapp):
+
+    from app.ui.widgets import AgentSteps
+
+    window, _ = make_window(qapp)
+    window.busy = True
+
+    tool_event(window, "start", 1, "open_application", {"name": "notepad"})
+    tool_event(window, "start", 2, "get_weather", {"city": "Vizag"})
+    pump(qapp, lambda: window._steps is not None)
+
+    steps = window._steps
+
+    assert isinstance(steps, AgentSteps)
+    assert [r.label.text() for r in steps.order][0].endswith("Opening notepad")
+    assert not steps.done
+
+    tool_event(window, "end", 1, "open_application", ok=True, seconds=0.2)
+    tool_event(window, "end", 2, "get_weather", ok=False, seconds=1.0)
+    pump(qapp, lambda: steps.order[1].finished)
+
+    window._on_reply({"response": "Done.", "tool_used": True})
+
+    assert steps.done
+    assert "Used 2 actions, 1 failed" in steps.title.text()
+
+    # a failure stays visible; a clean run folds away
+    assert not steps.body.isHidden()
+
+
+def test_a_clean_multi_step_run_folds_to_one_line(qapp):
+
+    window, _ = make_window(qapp)
+    window.busy = True
+
+    for i, name in enumerate(["web_search", "read_webpage"], start=1):
+        tool_event(window, "start", i, name, {"query": "x", "url": "https://example.com/a"})
+        tool_event(window, "end", i, name, ok=True, seconds=0.3)
+
+    pump(qapp, lambda: window._steps is not None and window._steps.order[-1].finished)
+
+    steps = window._steps
+
+    window._on_reply({"response": "Here.", "tool_used": True})
+
+    assert steps.title.text() == "Used 2 actions"
+    assert steps.body.isHidden()
+
+    steps.toggle()
+
+    assert not steps.body.isHidden()
+
+
+def test_tool_events_outside_a_request_are_ignored(qapp):
+
+    window, _ = make_window(qapp)
+
+    tool_event(window, "start", 1, "web_search", {"query": "x"})
+    qapp.processEvents()
+
+    assert window._steps is None
+
+
+def test_steps_are_attached_to_the_real_registry(qapp):
+
+    from app.tools.registry import Tool, ToolRegistry
+
+    sophia = FakeSophia()
+    registry = ToolRegistry()
+    registry.register(Tool(name="get_current_time", description="t", handler=lambda c: "noon"))
+    sophia.brain = SimpleNamespace(registry=registry, screen_policy={})
+
+    window, _ = make_window(qapp, sophia)
+
+    assert len(registry.observers) == 1
+
+    window.busy = True
+    registry.execute("get_current_time", {}, None)
+
+    assert pump(qapp, lambda: window._steps is not None and window._steps.order[0].finished)
+
+
+def test_status_pill_colours_follow_the_state(qapp):
+
+    from app.ui.widgets import StatusPill
+
+    assert StatusPill.classify("Thinking...") == "working"
+    assert StatusPill.classify("Listening...") == "listening"
+    assert StatusPill.classify("Listening for 'Hey Jarvis'") == "idle"
+    assert StatusPill.classify("I didn't hear anything") == "problem"
+    assert StatusPill.classify("Ready") == "idle"
+
+    pill = StatusPill()
+    pill.setText("Thinking...")
+
+    assert pill.property("state") == "working"
+
+
+def test_activity_wording():
+
+    from app.ui.activity import describe_step
+
+    assert describe_step("open_application", {"name": "Notepad"})[1] == "Opening Notepad"
+    assert describe_step("get_weather", {"city": "Vizag"})[1] == "Checking the weather in Vizag"
+    assert describe_step("get_weather", {})[1] == "Checking the weather"
+    assert describe_step("read_webpage", {"url": "https://www.bbc.com/news/x"})[1] == "Reading www.bbc.com"
+    assert describe_step("mcp_github_list_issues")[1] == "Github list issues"
+    assert describe_step("some_new_tool")[1] == "Some new tool"
+
+    long_query = "x" * 200
+
+    assert len(describe_step("web_search", {"query": long_query})[1]) < 80

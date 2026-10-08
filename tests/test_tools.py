@@ -768,3 +768,25 @@ def test_blocked_requests_raise_through_risk_fn():
     result = registry.execute("t", {}, None)
 
     assert not result.ok and result.message == "nope"
+
+
+def test_observers_see_each_tool_start_and_end():
+
+    from app.tools.registry import Tool, ToolRegistry
+
+    registry = ToolRegistry()
+    registry.register(Tool(name="ping", description="p", handler=lambda c: "pong"))
+    registry.register(Tool(name="boom", description="b", handler=lambda c: 1 / 0))
+
+    seen = []
+    registry.observers.append(seen.append)
+    registry.observers.append(lambda e: 1 / 0)       # a broken observer is harmless
+
+    registry.execute("ping", {}, None)
+    registry.execute("boom", {}, None)
+
+    assert [(e["phase"], e["name"]) for e in seen] == [
+        ("start", "ping"), ("end", "ping"), ("start", "boom"), ("end", "boom"),
+    ]
+    assert seen[1]["ok"] is True and seen[3]["ok"] is False
+    assert seen[0]["token"] == seen[1]["token"] != seen[2]["token"]

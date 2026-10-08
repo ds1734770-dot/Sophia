@@ -1,15 +1,19 @@
 import math
 import re
+import time
 
 from PySide6.QtCore import (
     QEasingCurve,
+    QPointF,
+    QRectF,
     QPropertyAnimation,
     QTimer,
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -153,6 +157,18 @@ class Bubble(QFrame):
 
         self.dots = None
 
+        # hover to copy: floats in the corner, so the bubble never resizes
+        self.copy_button = None
+
+        if role == "bot" and not dots:
+
+            self.copy_button = QPushButton("Copy", self)
+            self.copy_button.setObjectName("copy")
+            self.copy_button.setCursor(Qt.PointingHandCursor)
+            self.copy_button.setFixedSize(46, 22)
+            self.copy_button.clicked.connect(self._copy)
+            self.copy_button.hide()
+
         if dots:
 
             self.dots = ThinkingDots()
@@ -164,6 +180,31 @@ class Bubble(QFrame):
             self.set_text(text)
 
     # ------------------------------------------------
+
+    def _copy(self):
+
+        QApplication.clipboard().setText(self._full)
+
+        self.copy_button.setText("Copied")
+
+        QTimer.singleShot(1200, lambda: self.copy_button.setText("Copy"))
+
+    def enterEvent(self, event):
+
+        if self.copy_button is not None and self._full.strip():
+
+            self.copy_button.move(self.width() - 52, 4)
+            self.copy_button.show()
+            self.copy_button.raise_()
+
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+
+        if self.copy_button is not None:
+            self.copy_button.hide()
+
+        super().leaveEvent(event)
 
     def set_text(self, text):
 
@@ -248,6 +289,418 @@ class Bubble(QFrame):
         self.setFixedWidth(max(60, min(max_width, wanted)))
 
 
+# ---------------------------------------------------------------
+# Agent look: avatar, status pill, live steps
+# ---------------------------------------------------------------
+
+AMBER = QColor("#ffb800")
+GREEN = QColor("#3ddc97")
+RED = QColor("#ff6b6b")
+MUTED_COLOR = QColor("#8a93a6")
+
+
+class Avatar(QWidget):
+    """
+    Sophia's mark next to her messages: the car on a dark disc with a
+    thin amber ring.
+    """
+
+    SIZE = 30
+
+    def __init__(self, pixmap=None):
+
+        super().__init__()
+
+        self.pixmap = pixmap
+        self.setFixedSize(self.SIZE, self.SIZE)
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        size = self.SIZE
+        rect = QRectF(1, 1, size - 2, size - 2)
+
+        gradient = QLinearGradient(0, 0, size, size)
+        gradient.setColorAt(0, QColor("#232837"))
+        gradient.setColorAt(1, QColor("#12151d"))
+
+        painter.setBrush(gradient)
+        painter.setPen(QPen(QColor(255, 184, 0, 150), 1.4))
+        painter.drawEllipse(rect)
+
+        if self.pixmap is not None:
+
+            inner = size - 8
+
+            painter.setClipPath(self._disc(rect))
+            painter.drawPixmap(
+                QRectF(4, 4, inner, inner).toRect(), self.pixmap
+            )
+
+        else:
+
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(AMBER)
+            painter.drawEllipse(QRectF(size / 2 - 4, size / 2 - 4, 8, 8))
+
+        painter.end()
+
+    @staticmethod
+    def _disc(rect):
+
+        from PySide6.QtGui import QPainterPath
+
+        path = QPainterPath()
+        path.addEllipse(rect)
+
+        return path
+
+
+class StatusPill(QLabel):
+    """
+    The header's status: a coloured dot and the words. The colour follows
+    what Sophia is doing (idle, working, listening, a problem).
+    """
+
+    WORKING = ("thinking", "answering", "transcrib", "starting", "working")
+    LISTENING = ("listening",)
+    PROBLEM = ("didn't", "not running", "couldn't", "failed")
+
+    def __init__(self, text=""):
+
+        super().__init__(text)
+
+        self.setObjectName("status")
+        self.setProperty("state", "idle")
+
+        self._phase = 0.0
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._pulse)
+
+    @classmethod
+    def classify(cls, text):
+
+        low = text.lower()
+
+        if any(w in low for w in cls.PROBLEM):
+            return "problem"
+
+        if any(w in low for w in cls.LISTENING) and "for" not in low:
+            return "listening"
+
+        if any(w in low for w in cls.WORKING):
+            return "working"
+
+        return "idle"
+
+    def setText(self, text):
+
+        super().setText(text)
+
+        state = self.classify(text)
+
+        if state != self.property("state"):
+
+            self.setProperty("state", state)
+
+            self.style().unpolish(self)
+            self.style().polish(self)
+
+        if state in ("working", "listening") and not self._timer.isActive():
+            self._timer.start(50)
+
+        elif state not in ("working", "listening"):
+            self._timer.stop()
+
+        self.setVisible(bool(text))
+        self.update()
+
+    def _pulse(self):
+
+        self._phase += 0.15
+        self.update()
+
+    def paintEvent(self, event):
+
+        super().paintEvent(event)
+
+        state = self.property("state")
+
+        color = {
+            "idle": GREEN, "working": AMBER, "listening": GREEN, "problem": RED,
+        }.get(state, MUTED_COLOR)
+
+        pulse = 0.0
+
+        if state in ("working", "listening"):
+            pulse = (math.sin(self._phase) + 1) / 2
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        centre = QPointF(12, self.height() / 2)
+
+        if pulse:
+
+            halo = QColor(color)
+            halo.setAlpha(int(70 * pulse))
+
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(halo)
+            painter.drawEllipse(centre, 3.5 + 3 * pulse, 3.5 + 3 * pulse)
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(centre, 3.2, 3.2)
+
+        painter.end()
+
+
+class StepGlyph(QWidget):
+    """
+    The state of one step: a spinning arc while it runs, then a tick or
+    a cross.
+    """
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setFixedSize(18, 18)
+
+        self.mode = "running"
+        self._angle = 0
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._spin)
+        self._timer.start(30)
+
+    def _spin(self):
+
+        self._angle = (self._angle + 18) % 360
+        self.update()
+
+    def set_mode(self, mode):
+
+        self.mode = mode
+
+        if mode != "running":
+            self._timer.stop()
+
+        self.update()
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        rect = QRectF(3, 3, 12, 12)
+
+        if self.mode == "running":
+
+            painter.setPen(QPen(QColor(255, 184, 0, 60), 2))
+            painter.drawEllipse(rect)
+
+            painter.setPen(QPen(AMBER, 2, Qt.SolidLine, Qt.RoundCap))
+            painter.drawArc(rect, -self._angle * 16, 100 * 16)
+
+        elif self.mode == "ok":
+
+            painter.setPen(QPen(GREEN, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawPolyline([QPointF(4, 9.5), QPointF(7.5, 13), QPointF(14, 5.5)])
+
+        else:
+
+            painter.setPen(QPen(RED, 2, Qt.SolidLine, Qt.RoundCap))
+            painter.drawLine(QPointF(5, 5), QPointF(13, 13))
+            painter.drawLine(QPointF(13, 5), QPointF(5, 13))
+
+        painter.end()
+
+
+class StepRow(QWidget):
+
+    def __init__(self, icon, text):
+
+        super().__init__()
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(8)
+
+        self.glyph = StepGlyph()
+
+        self.label = QLabel(f"{icon}  {text}")
+        self.label.setObjectName("step_text")
+        self.label.setWordWrap(True)
+
+        self.time = QLabel("")
+        self.time.setObjectName("step_time")
+
+        layout.addWidget(self.glyph)
+        layout.addWidget(self.label, 1)
+        layout.addWidget(self.time)
+
+        self.started = time.monotonic()
+        self.finished = False
+        self.ok = True
+
+    def finish(self, ok, seconds, detail=""):
+
+        self.finished = True
+        self.ok = ok
+
+        self.glyph.set_mode("ok" if ok else "fail")
+        self.time.setText(f"{seconds:.1f}s" if seconds >= 0.05 else "")
+
+        if not ok and detail:
+            self.label.setToolTip(detail)
+
+
+class AgentSteps(QFrame):
+    """
+    What Sophia is doing right now, one line per action with a live
+    spinner, folding into a one-line summary when she is done ("Used 3
+    actions"). Click the header to open or close the list.
+    """
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setObjectName("steps")
+        self.setMinimumWidth(380)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setSpacing(4)
+
+        head = QWidget()
+        head.setCursor(Qt.PointingHandCursor)
+
+        row = QHBoxLayout(head)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+
+        self.glyph = StepGlyph()
+
+        self.title = QLabel("Working…")
+        self.title.setObjectName("steps_title")
+
+        self.meta = QLabel("")
+        self.meta.setObjectName("step_time")
+
+        self.chevron = QLabel("▾")
+        self.chevron.setObjectName("step_time")
+
+        row.addWidget(self.glyph)
+        row.addWidget(self.title)
+        row.addStretch()
+        row.addWidget(self.meta)
+        row.addWidget(self.chevron)
+
+        head.mousePressEvent = lambda event: self.toggle()
+
+        self.body = QWidget()
+
+        self._rows_layout = QVBoxLayout(self.body)
+        self._rows_layout.setContentsMargins(26, 2, 0, 2)
+        self._rows_layout.setSpacing(0)
+
+        outer.addWidget(head)
+        outer.addWidget(self.body)
+
+        self.rows = {}
+        self.order = []
+        self.started = time.monotonic()
+        self.done = False
+
+        self._clock = QTimer(self)
+        self._clock.timeout.connect(self._tick)
+        self._clock.start(100)
+
+    # ------------------------------------------------
+
+    def _tick(self):
+
+        self.meta.setText(f"{time.monotonic() - self.started:.1f}s")
+
+    def add(self, key, icon, text):
+
+        row = StepRow(icon, text)
+
+        self.rows[key] = row
+        self.order.append(row)
+
+        self._rows_layout.addWidget(row)
+
+        self.title.setText("Working…" if not self.done else self.title.text())
+
+        return row
+
+    def finish(self, key, ok, seconds, detail=""):
+
+        row = self.rows.get(key)
+
+        if row is not None:
+            row.finish(ok, seconds, detail)
+
+    def complete(self):
+        """
+        She is finished: stop the spinners and fold the list.
+        """
+
+        if self.done:
+            return
+
+        self.done = True
+
+        self._clock.stop()
+
+        for row in self.order:
+
+            if not row.finished:
+                row.finish(True, -1)
+
+        total = time.monotonic() - self.started
+        count = len(self.order)
+        failed = sum(1 for r in self.order if not r.ok)
+
+        self.glyph.set_mode("fail" if failed == count and count else "ok")
+
+        if count == 1:
+            self.title.setText(self.order[0].label.text())
+            self.body.hide()
+            self.chevron.hide()
+
+        else:
+
+            self.title.setText(f"Used {count} actions")
+
+            if failed:
+                self.title.setText(f"Used {count} actions, {failed} failed")
+
+            # tidy by default; failures stay visible
+            self.body.setVisible(bool(failed))
+            self.chevron.setText("▴" if failed else "▾")
+
+        self.meta.setText(f"{total:.1f}s")
+
+    def toggle(self):
+
+        if len(self.order) < 2 and self.done:
+            return
+
+        show = self.body.isHidden()
+
+        self.body.setVisible(show)
+        self.chevron.setText("▴" if show else "▾")
+
+
 class ConfirmBar(QWidget):
     """
     Yes / No buttons shown under a question from Sophia.
@@ -293,29 +746,33 @@ class SuggestionChips(QWidget):
 
     chosen = Signal(str)
 
-    def __init__(self, suggestions):
+    COLUMNS = 3
+
+    def __init__(self, suggestions, icons=None):
 
         super().__init__()
 
-        layout = QHBoxLayout(self)
+        from PySide6.QtWidgets import QGridLayout
+
+        layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        layout.addStretch()
+        layout.setHorizontalSpacing(10)
+        layout.setVerticalSpacing(10)
 
         self.buttons = []
 
-        for text in suggestions:
+        for i, text in enumerate(suggestions):
 
-            button = QPushButton(text)
+            icon = (icons or [""] * len(suggestions))[i]
+
+            button = QPushButton(f"{icon}  {text}" if icon else text)
             button.setObjectName("chip")
             button.setCursor(Qt.PointingHandCursor)
             button.clicked.connect(lambda _=False, t=text: self.chosen.emit(t))
 
-            layout.addWidget(button)
+            layout.addWidget(button, i // self.COLUMNS, i % self.COLUMNS)
 
             self.buttons.append(button)
-
-        layout.addStretch()
 
 
 class ChatView(QScrollArea):
@@ -342,6 +799,9 @@ class ChatView(QScrollArea):
         self._rows = []
         self._thinking = None
 
+        # Sophia's mark, drawn beside her messages (set by the window)
+        self.avatar_pixmap = None
+
         # keep the view pinned to the newest message
         self.verticalScrollBar().rangeChanged.connect(self._stick_to_bottom)
 
@@ -363,8 +823,21 @@ class ChatView(QScrollArea):
             layout.addWidget(widget)
 
         else:
+
+            layout.setSpacing(10)
+
+            if isinstance(widget, Bubble) and widget.role == "bot":
+                layout.addWidget(Avatar(self.avatar_pixmap), 0, Qt.AlignTop)
+
+            elif isinstance(widget, AgentSteps):
+
+                # lines up under her messages
+                layout.addSpacing(Avatar.SIZE)
+
             layout.addWidget(widget)
             layout.addStretch()
+
+        row._content = widget
 
         widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 
@@ -394,7 +867,7 @@ class ChatView(QScrollArea):
 
         for row in self._rows:
 
-            widget = row.layout().itemAt(0).widget() or row.layout().itemAt(1).widget()
+            widget = getattr(row, "_content", None)
 
             if isinstance(widget, Bubble):
                 self._limit_width(widget)
@@ -417,6 +890,17 @@ class ChatView(QScrollArea):
             bubble.fit(max(240, int(self.viewport().width() * BUBBLE_WIDTH_RATIO)))
 
         return bubble
+
+    def add_steps(self):
+        """
+        The live "what I'm doing" card for the current request.
+        """
+
+        steps = AgentSteps()
+
+        self._insert(steps, "left", animate=True)
+
+        return steps
 
     def add_confirm_bar(self, allow_always=False):
 

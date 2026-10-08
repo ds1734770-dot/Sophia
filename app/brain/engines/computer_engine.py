@@ -18,7 +18,7 @@ class ComputerEngine:
 
         return (
             len(words) > cls.MAX_ENTITY_WORDS
-            or any(w in ("and", "then", "also") for w in words)
+            or any(w in ("and", "then", "also", "from", "inside", "within") for w in words)
         )
 
     # --------------------------------------------------

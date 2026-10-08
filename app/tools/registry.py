@@ -7,7 +7,9 @@ or a local command triggers it) goes through ToolRegistry.execute, so a
 risky action can never skip its confirmation step.
 """
 
+import itertools
 import logging
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -107,11 +109,28 @@ class ToolRegistry:
         # Optional callable(name, args, result, confirmed) for the log
         self.audit = audit
 
+        # Callables told when a tool starts and ends, for live progress
+        # in the interface: observer(event) with a dict holding phase
+        # ("start" or "end"), token, name, args and, at the end, ok,
+        # message and seconds.
+        self.observers = []
+        self._tokens = itertools.count(1)
+
     # ------------------------------------------------
 
     def register(self, tool):
 
         self.tools[tool.name] = tool
+
+    def _notify(self, event):
+
+        for observer in list(self.observers):
+
+            try:
+                observer(event)
+
+            except Exception:
+                log.debug("Tool observer failed", exc_info=True)
 
     def names(self):
 
@@ -222,6 +241,11 @@ class ToolRegistry:
 
             return self._ask_confirmation(tool, risk, args, context)
 
+        token = next(self._tokens)
+        started = time.monotonic()
+
+        self._notify({"phase": "start", "token": token, "name": name, "args": args})
+
         try:
 
             outcome = tool.handler(context, **args)
@@ -234,6 +258,8 @@ class ToolRegistry:
 
             self._audit(name, args, result, confirmed)
 
+            self._finish(token, name, args, result, started)
+
             return result
 
         if isinstance(outcome, tuple):
@@ -245,7 +271,17 @@ class ToolRegistry:
 
         self._audit(name, args, result, confirmed)
 
+        self._finish(token, name, args, result, started)
+
         return result
+
+    def _finish(self, token, name, args, result, started):
+
+        self._notify({
+            "phase": "end", "token": token, "name": name, "args": args,
+            "ok": result.ok, "message": result.message,
+            "seconds": time.monotonic() - started,
+        })
 
     # ------------------------------------------------
 
