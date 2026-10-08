@@ -3,8 +3,14 @@ from app.brain.engines.memory_engine import MemoryEngine
 from app.brain.engines.pending_action_engine import PendingActionEngine
 from app.brain.engines.tool_engine import ToolEngine
 from app.planner.schedule_manager import ScheduleManager
+from app.prompts.prompt_manager import PromptManager
+from app.computer.system_controls import SystemControls
 from app.tools.builtin_tools import build_default_registry
 
+
+
+SUMMARY_MAX_MESSAGES = 60
+SUMMARY_MAX_CHARS = 600
 
 
 class Brain:
@@ -24,6 +30,7 @@ class Brain:
             files=self.tool_engine.file_manager,
             indexer=self.tool_engine.indexer,
             planner=ScheduleManager(),
+            system=SystemControls(),
         )
 
 
@@ -107,6 +114,34 @@ class Brain:
             }
 
     # -----------------------------------------------------
+
+    def summarize(self, previous_summary, messages):
+        """
+        Fold older messages into the running summary (background work,
+        so it uses the cheap model).
+        """
+
+        # Bound the request: a long backlog is trimmed to its newest
+        # messages, each cut short.
+        messages = messages[-SUMMARY_MAX_MESSAGES:]
+
+        transcript = "\n".join(
+            f"{m['role']}: {m['content'][:SUMMARY_MAX_CHARS]}"
+            for m in messages
+        )
+
+        request = (
+            f"Previous summary:\n{previous_summary or '(none)'}\n\n"
+            f"New messages:\n{transcript}"
+        )
+
+        response = self.chat_engine.client.generate(
+            [{"role": "user", "content": request}],
+            PromptManager.summary_prompt(),
+            light=True,
+        )
+
+        return response.text
 
     def extract_memory(self, user_message):
         """

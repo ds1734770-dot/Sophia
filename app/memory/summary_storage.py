@@ -1,18 +1,23 @@
 import json
-from pathlib import Path
+
+from app.settings.paths import SUMMARY_FILE
 
 
 class SummaryStorage:
 
-    FILE = Path("summary.json")
+    FILE = SUMMARY_FILE
 
     @classmethod
     def load(cls):
         if not cls.FILE.exists():
             return ""
 
-        with open(cls.FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(cls.FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        except (OSError, ValueError):
+            return ""
 
     @classmethod
     def save(cls, summary):

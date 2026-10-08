@@ -1,12 +1,14 @@
+import threading
+
 from app.computer.application_indexer import ApplicationIndexer
 from app.computer.application_launcher import ApplicationLauncher
 from app.computer.application_refresh_manager import ApplicationRefreshManager
+from app.computer.builtin_apps import merge_builtin
 
 from app.computer.search.application_ranker import ApplicationRanker
 from app.computer.search.confidence_evaluator import ConfidenceEvaluator
 
 from app.computer.semantic.semantic_index import SemanticIndex
-from app.computer.builtin_apps import merge_builtin
 
 
 class ApplicationManager:
@@ -22,6 +24,9 @@ class ApplicationManager:
 
         self.semantic = SemanticIndex()
 
+        # The background refresher and the chat thread share the index
+        self._lock = threading.RLock()
+
     # ----------------------------------------------------
 
     def initialize(self):
@@ -32,9 +37,26 @@ class ApplicationManager:
             self.refresh()
             return
 
-        result = self.refresh_manager.refresh()
+        self.refresh_if_changed()
 
-        if result.changed:
+    # ----------------------------------------------------
+
+    def refresh_if_changed(self, quiet=False):
+        """
+        Rescan for installed apps; rebuild the index only when
+        something changed. Returns True if the index was rebuilt.
+        """
+
+        with self._lock:
+
+            result = self.refresh_manager.refresh()
+
+            if not result.changed:
+
+                if not quiet:
+                    print("[ApplicationManager] Using cached application database.")
+
+                return False
 
             applications = self.indexer.build(result)
 
@@ -42,38 +64,53 @@ class ApplicationManager:
 
             self.refresh_manager.save_fingerprints(result)
 
-            print("[ApplicationManager] Applications refreshed.")
+            if not quiet:
+                print("[ApplicationManager] Applications refreshed.")
 
-        else:
-
-            print("[ApplicationManager] Using cached application database.")
-
-    # ----------------------------------------------------
+            return True
 
     def refresh(self):
 
-        result = self.refresh_manager.refresh()
+        with self._lock:
 
-        applications = self.indexer.build(result)
+            result = self.refresh_manager.refresh()
 
-        count = self.indexer.save(applications)
+            applications = self.indexer.build(result)
 
-        self.refresh_manager.save_fingerprints(result)
+            count = self.indexer.save(applications)
 
-        print(f"[ApplicationManager] Indexed {count} applications.")
+            self.refresh_manager.save_fingerprints(result)
+
+            print(f"[ApplicationManager] Indexed {count} applications.")
+
+    # ----------------------------------------------------
+
+    def _rank(self, app_name):
+
+        with self._lock:
+            applications = merge_builtin(self.indexer.load())
+
+        applications = self.semantic.build(applications)
+
+        return self.ranker.rank(applications, app_name)
+
+    def find(self, app_name):
+        """
+        The single application that clearly matches the name, or None.
+        """
+
+        matches = self._rank(app_name)
+
+        if matches and self.confidence.confident(matches):
+            return matches[0].app
+
+        return None
 
     # ----------------------------------------------------
 
     def open(self, app_name):
 
-        applications = merge_builtin(self.indexer.load())
-
-        applications = self.semantic.build(applications)
-
-        matches = self.ranker.rank(
-            applications,
-            app_name
-        )
+        matches = self._rank(app_name)
 
         if not matches:
 

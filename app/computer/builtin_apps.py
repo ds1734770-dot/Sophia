@@ -21,6 +21,13 @@ BUILTIN_SHELL_TARGETS = [
 ]
 
 
+# Programs whose running process has a different name than the launcher
+PROCESS_NAMES = {
+    "Calculator": "CalculatorApp.exe",
+    "Snipping Tool": "SnippingTool.exe",
+}
+
+
 def builtin_applications():
     """
     Records in the same shape as the discovered applications.
@@ -33,6 +40,7 @@ def builtin_applications():
             "name": name,
             "aliases": aliases,
             "exe": exe,
+            "process": PROCESS_NAMES.get(name),
             "type": "builtin",
         })
 

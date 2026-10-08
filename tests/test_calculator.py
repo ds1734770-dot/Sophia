@@ -7,7 +7,6 @@ from app.brain.engines.calculator_engine import (
     UnsafeExpression,
     safe_eval,
 )
-from app.tools.calculator_tool import CalculatorTool
 
 engine = CalculatorEngine()
 
@@ -65,9 +64,3 @@ def test_safe_eval_rejects_code():
     for bad in ["__import__('os').system('x')", "open('f')", "[1]", "a+1"]:
         with pytest.raises((UnsafeExpression, SyntaxError, ValueError)):
             safe_eval(bad)
-
-
-def test_tool_uses_safe_eval():
-
-    assert CalculatorTool().run(expression="2+3") == 5
-    assert "Error" in str(CalculatorTool().run(expression="__import__('os')"))

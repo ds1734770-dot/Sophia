@@ -196,6 +196,26 @@ manage a schedule.
         return "\n\n".join(sections)
 
     # ===========================
+    # Conversation Summary Prompt
+    # ===========================
+
+    @staticmethod
+    def summary_prompt():
+        return """
+You maintain a running summary of a conversation between a user and Sophia, an AI assistant.
+
+You receive the previous summary (may be empty) and the newer messages. Return the updated summary.
+
+Rules:
+
+- Keep it under 200 words.
+- Keep what matters later: the user's goals, decisions, preferences, unfinished tasks, and key facts or numbers.
+- Drop greetings, small talk, and details that no longer matter.
+- Write plain prose or short bullet points. No preamble.
+- Return ONLY the summary text.
+"""
+
+    # ===========================
     # Memory Extraction Prompt
     # ===========================
 

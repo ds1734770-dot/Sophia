@@ -7,6 +7,8 @@ from app.computer.windows_folders import WindowsFolders
 from app.computer.explorer_window_manager import ExplorerWindowManager
 from app.computer.windows_system_manager import WindowsSystemManager
 from app.computer.application_manager import ApplicationManager
+from app.computer.application_discovery.shortcut_resolver import ShortcutResolver
+from app.computer.window_manager import WindowManager, process_name_for
 
 
 class ComputerManager:
@@ -16,6 +18,7 @@ class ComputerManager:
         self.explorer = ExplorerWindowManager()
         self.windows = WindowsSystemManager()
         self.app_manager = ApplicationManager()
+        self.window_manager = WindowManager()
 
     APPS = {
         "chrome": {
@@ -67,48 +70,67 @@ class ComputerManager:
     
         return self.app_manager.open(app_name)
 
+    ALIASES = {
+        "vs code": "vscode",
+        "visual studio code": "vscode",
+    }
+
+    def resolve_process(self, app_name):
+        """
+        The program file name to close for an app name, or None.
+        Known apps first, then anything discovered on this PC.
+        """
+
+        app_name = app_name.lower().strip()
+        app_name = self.ALIASES.get(app_name, app_name)
+
+        if app_name in self.APPS:
+            return self.APPS[app_name]["process"]
+
+        application = self.app_manager.find(app_name)
+
+        if application is None:
+            return self.window_manager.guess_process(app_name)
+
+        name = process_name_for(application)
+
+        # Start Menu entries are shortcuts; the program is their target
+        if name is None and application.get("shortcut"):
+
+            info = ShortcutResolver().resolve(application["shortcut"])
+
+            target = (info or {}).get("target") or ""
+
+            if target.lower().endswith(".exe"):
+                name = os.path.basename(target)
+
+        # Store apps and the like: fall back to what is running now
+        return name or self.window_manager.guess_process(app_name)
+
     def can_close(self, app_name):
         """
-        True if Sophia knows how to close this application.
+        True if Sophia can work out which program to close.
         """
 
-        app_name = app_name.lower().strip()
+        return self.resolve_process(app_name) is not None
 
-        aliases = {
-            "vs code": "vscode",
-            "visual studio code": "vscode",
-        }
+    def close_app(self, app_name, force=False):
 
-        return aliases.get(app_name, app_name) in self.APPS
+        process = self.resolve_process(app_name)
 
-    def close_app(self, app_name):
-
-        app_name = app_name.lower().strip()
-
-        aliases = {
-            "vs code": "vscode",
-            "visual studio code": "vscode",
-        }
-
-        app_name = aliases.get(app_name, app_name)
-
-        if app_name not in self.APPS:
+        if process is None:
             return False, f"I don't know how to close '{app_name}'."
 
-        process = self.APPS[app_name]["process"]
+        success, message = self.window_manager.close(process, force=force)
 
-        try:
-
-            subprocess.run(
-                ["taskkill", "/IM", process, "/F"],
-                check=True,
-                capture_output=True,
-            )
-
+        if success:
             return True, f"Closing {app_name.title()}..."
 
-        except Exception:
-            return False, f"{app_name.title()} isn't running."
+        return False, message
+
+    def window_action(self, name, action):
+
+        return self.window_manager.window_action(name, action)
 
     # -------------------------------------------------
     # Folders

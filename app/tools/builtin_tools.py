@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.brain.engines.calculator_engine import UnsafeExpression, safe_eval
+from app.memory.profile_storage import ProfileStorage
 from app.file.path_guard import (
     EXECUTABLE_EXTENSIONS,
     allowed_roots,
@@ -23,13 +24,15 @@ DATE_FORMAT = "%Y-%m-%d"
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
-def build_default_registry(computer, browser, files, indexer, planner):
+def build_default_registry(
+    computer, browser, files, indexer, planner, system=None
+):
     """
     Create the registry with every built-in tool.
 
     computer: ComputerManager   browser: BrowserManager
     files: FileManager          indexer: FileIndexer
-    planner: ScheduleManager
+    planner: ScheduleManager  system: SystemControls (optional)
     """
 
     registry = ToolRegistry()
@@ -90,17 +93,45 @@ def build_default_registry(computer, browser, files, indexer, planner):
     registry.register(Tool(
         name="close_application",
         description=(
-            "Force-close a running application. Unsaved work in it "
-            "is lost, so the user must confirm."
+            "Close a running application. By default it is asked to "
+            "close politely (it may offer to save). Only set force=true "
+            "if the user explicitly asks to force close it; unsaved "
+            "work is then lost."
         ),
-        parameters={"name": STRING},
+        parameters={
+            "name": STRING,
+            "force": {"type": "boolean"},
+        },
         required=["name"],
         risk=Risk.CONFIRM,
         preview=lambda a: (
             f"I'm about to force-close {a['name']}. "
             "Unsaved work in it will be lost."
+            if a.get("force")
+            else f"I'm about to close {a['name']}."
         ),
-        handler=lambda context, name: computer.close_app(name),
+        handler=lambda context, name, force=False: computer.close_app(
+            name, force=bool(force)
+        ),
+    ))
+
+    registry.register(Tool(
+        name="window_action",
+        description=(
+            "Switch to, minimize, maximize or restore the open window "
+            "whose title contains the given text."
+        ),
+        parameters={
+            "name": STRING,
+            "action": {
+                "type": "string",
+                "enum": ["focus", "minimize", "maximize", "restore"],
+            },
+        },
+        required=["name", "action"],
+        handler=lambda context, name, action: computer.window_action(
+            name, action
+        ),
     ))
 
     registry.register(Tool(
@@ -339,6 +370,144 @@ def build_default_registry(computer, browser, files, indexer, planner):
             f"I'm about to move {a['path']} to the Recycle Bin."
         ),
         handler=delete_file,
+    ))
+
+    # ----------------------------------------------
+    # System controls
+    # ----------------------------------------------
+
+    if system is not None:
+
+        def set_volume(context, level=None, change=None, steps=5):
+
+            if level is not None:
+                return system.set_volume(level)
+
+            if change in ("up", "down"):
+                return system.change_volume(change, steps)
+
+            if change == "mute":
+                return system.toggle_mute()
+
+            return False, "Give a level (0-100), or change = up, down or mute."
+
+        registry.register(Tool(
+            name="set_volume",
+            description=(
+                "Set the speaker volume to a level from 0 to 100, or "
+                "change it: change = up / down (steps of about 2%) or "
+                "mute (toggles mute)."
+            ),
+            parameters={
+                "level": {"type": "integer"},
+                "change": {"type": "string", "enum": ["up", "down", "mute"]},
+                "steps": {"type": "integer"},
+            },
+            handler=set_volume,
+        ))
+
+        registry.register(Tool(
+            name="set_brightness",
+            description="Set the screen brightness (0-100). Laptop screens only.",
+            parameters={"level": {"type": "integer"}},
+            required=["level"],
+            handler=lambda context, level: system.set_brightness(level),
+        ))
+
+        registry.register(Tool(
+            name="take_screenshot",
+            description="Save a screenshot of the screen to Pictures/Sophia.",
+            handler=lambda context: system.screenshot(),
+        ))
+
+        registry.register(Tool(
+            name="power_action",
+            description=(
+                "Shut down, restart or sleep the computer. Shutdown and "
+                "restart start a 30 second countdown that can be "
+                "cancelled with action=cancel."
+            ),
+            parameters={
+                "action": {
+                    "type": "string",
+                    "enum": ["shutdown", "restart", "sleep", "cancel"],
+                },
+            },
+            required=["action"],
+            risk=Risk.DANGEROUS,
+            preview=lambda a: (
+                "I'm about to cancel the pending shutdown."
+                if a["action"] == "cancel"
+                else f"I'm about to {a['action']} your computer. "
+                "Save your work first."
+            ),
+            handler=lambda context, action: system.power(action),
+        ))
+
+    # ----------------------------------------------
+    # Memory (what Sophia knows about the user)
+    # ----------------------------------------------
+
+    def remember_fact(context, key, value):
+
+        key = key.strip().lower().replace(" ", "_")
+
+        context.profile.set(key, value)
+
+        ProfileStorage.save(context.profile.get_all())
+
+        return True, f"Remembered: {key} = {value}."
+
+    def forget_fact(context, key):
+
+        key = key.strip().lower().replace(" ", "_")
+
+        facts = context.profile.get_all()
+
+        if key not in facts:
+            return False, f"I don't have anything stored as '{key}'."
+
+        del facts[key]
+
+        ProfileStorage.save(facts)
+
+        return True, f"Forgot '{key}'."
+
+    def list_memories(context):
+
+        facts = context.profile.get_all()
+
+        if not facts:
+            return True, "I haven't stored any facts about you yet."
+
+        return True, "\n".join(f"{k}: {v}" for k, v in facts.items())
+
+    registry.register(Tool(
+        name="remember_fact",
+        description=(
+            "Store a lasting fact about the user when they ask you to "
+            "remember something. key is a short label like "
+            "'favorite_food'."
+        ),
+        parameters={"key": STRING, "value": STRING},
+        required=["key", "value"],
+        handler=remember_fact,
+    ))
+
+    registry.register(Tool(
+        name="forget_fact",
+        description="Delete one stored fact about the user, by its key.",
+        parameters={"key": STRING},
+        required=["key"],
+        risk=Risk.CONFIRM,
+        preview=lambda a: f"I'm about to forget '{a['key']}'.",
+        handler=forget_fact,
+    ))
+
+    registry.register(Tool(
+        name="list_memories",
+        description="List everything stored about the user.",
+        handler=list_memories,
     ))
 
     # ----------------------------------------------

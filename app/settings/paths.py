@@ -19,6 +19,8 @@ SCHEDULE_FILE = DATA_DIR / "schedules.json"
 
 USAGE_FILE = DATA_DIR / "usage.json"
 
+SUMMARY_FILE = DATA_DIR / "summary.json"
+
 APPLICATION_DATABASE = DATA_DIR / "applications.json"
 
 # ------------------------

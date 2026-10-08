@@ -17,6 +17,7 @@ from app.memory.summary_storage import SummaryStorage
 from app.context.context_builder import ContextBuilder
 
 from app.memory.memory_filter import MemoryFilter
+from app.memory.summarizer import Summarizer
 from app.brain.model_pool import UsageTracker
 from app.settings.paths import USAGE_FILE
 
@@ -49,10 +50,11 @@ class Sophia:
         self.summary.set(
             SummaryStorage.load()
         )
+        self.summarizer = Summarizer(self.brain.summarize)
         self.pending_actions = PendingActionManager()
         self.application_manager = ApplicationManager()
-        self.watcher_manager = WatcherManager()
         self.application_manager.initialize()
+        self.watcher_manager = WatcherManager(self.application_manager)
 
 
     def start(self):
@@ -153,9 +155,27 @@ class Sophia:
             response
         )
 
+        self.compact_history()
+
         MemoryStorage.save(
             self.memory.get_history()
         )
+
+    def compact_history(self):
+        """
+        Fold old messages into the summary once the chat gets long.
+        Never interrupts Sophia.
+        """
+
+        try:
+
+            if self.summarizer.maybe_summarize(self.memory, self.summary):
+
+                SummaryStorage.save(self.summary.get())
+
+        except Exception as e:
+
+            print(f"[Summary] {e}")
 
     EXIT_WORDS = {"x", "exit", "quit", "bye"}
 
