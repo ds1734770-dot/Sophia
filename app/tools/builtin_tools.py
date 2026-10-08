@@ -11,7 +11,9 @@ from app.memory.profile_storage import ProfileStorage
 from app.computer.shell_runner import ShellBlocked, classify
 from app.file.path_guard import PathGuard
 from app.tools.file_tools import register_file_tools
+from app.tools.personal_tools import register_personal_tools
 from app.tools.registry import Risk, Tool, ToolBlocked, ToolRegistry
+from app.tools.web_tools import register_web_tools
 
 STRING = {"type": "string"}
 
@@ -30,6 +32,9 @@ def build_default_registry(
     shell=None,
     guard=None,
     audit=None,
+    notes=None,
+    web=None,
+    personal=None,
 ):
     """
     Create the registry with every built-in tool.
@@ -224,6 +229,12 @@ def build_default_registry(
     ))
 
     # ----------------------------------------------
+    # Web (search, read pages, weather)
+    # ----------------------------------------------
+
+    register_web_tools(registry, **(web or {}))
+
+    # ----------------------------------------------
     # Files
     # ----------------------------------------------
 
@@ -385,6 +396,15 @@ def build_default_registry(
         description="List everything stored about the user.",
         handler=list_memories,
     ))
+
+    # ----------------------------------------------
+    # Notes, to-dos, system status, clipboard, media
+    # ----------------------------------------------
+
+    if notes is not None:
+        register_personal_tools(
+            registry, notes, browser, system=system, **(personal or {})
+        )
 
     # ----------------------------------------------
     # Shell

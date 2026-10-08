@@ -11,7 +11,8 @@ from app.file.file_manager import FileManager
 from app.file.path_guard import PathGuard
 from app.file.search import FileSearch
 from app.computer.shell_runner import ShellRunner
-from app.settings.paths import LOGS_DIR, PROJECT_ROOT
+from app.settings.paths import DATA_DIR, LOGS_DIR, PROJECT_ROOT
+from app.tools.notes_store import NoteStore
 
 
 
@@ -48,6 +49,7 @@ class Brain:
             shell=ShellRunner(),
             guard=self.guard,
             audit=AuditLog(LOGS_DIR / "actions.jsonl"),
+            notes=NoteStore(DATA_DIR / "notes.json"),
         )
 
 

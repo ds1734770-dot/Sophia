@@ -10,6 +10,17 @@ from pathlib import Path
 VK_VOLUME_MUTE = 0xAD
 VK_VOLUME_DOWN = 0xAE
 VK_VOLUME_UP = 0xAF
+VK_MEDIA_NEXT = 0xB0
+VK_MEDIA_PREVIOUS = 0xB1
+VK_MEDIA_STOP = 0xB2
+VK_MEDIA_PLAY_PAUSE = 0xB3
+
+MEDIA_KEYS = {
+    "next": VK_MEDIA_NEXT,
+    "previous": VK_MEDIA_PREVIOUS,
+    "stop": VK_MEDIA_STOP,
+    "play_pause": VK_MEDIA_PLAY_PAUSE,
+}
 KEYEVENTF_KEYUP = 0x0002
 
 # Each volume key press moves the volume by 2 percent
@@ -81,6 +92,17 @@ class SystemControls:
         self._press_key(VK_VOLUME_MUTE)
 
         return True, "Toggled mute."
+
+    def media(self, action):
+
+        code = MEDIA_KEYS.get(action)
+
+        if code is None:
+            return False, f"Unknown media action '{action}'."
+
+        self._press_key(code)
+
+        return True, f"Sent {action.replace('_', '/')} to the media player."
 
     # ------------------------------------------------
     # Brightness (laptop screens)
