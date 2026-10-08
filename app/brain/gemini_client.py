@@ -1,4 +1,5 @@
 import time
+from types import SimpleNamespace
 
 from google import genai
 from google.genai import types
@@ -7,6 +8,12 @@ from app.adapters.gemini_adapter import GeminiAdapter
 from app.brain.model_pool import ModelPool, UsageTracker
 from app.config.settings import Settings
 from app.settings.paths import USAGE_FILE
+
+
+class _MidStreamError(RuntimeError):
+    """
+    The stream broke after some text had already been shown.
+    """
 
 
 class GeminiClient:
@@ -99,6 +106,152 @@ class GeminiClient:
             model=model, contents=contents, config=config
         )
 
+    def _stream_attempt(self, model, contents, config):
+        """
+        A streaming request to one model; the same thinking-setting
+        handling as _attempt. Returns the chunk iterator.
+        """
+
+        level = self.settings.thinking_level
+
+        if level and model not in self.no_thinking:
+
+            config.thinking_config = types.ThinkingConfig(thinking_level=level)
+
+            try:
+
+                stream = self.client.models.generate_content_stream(
+                    model=model, contents=contents, config=config
+                )
+
+                first = next(iter(stream), None)
+
+                return first, stream
+
+            except Exception as e:
+
+                if "thinking" not in str(e).lower():
+                    raise
+
+                self.no_thinking.add(model)
+
+        config.thinking_config = None
+
+        stream = self.client.models.generate_content_stream(
+            model=model, contents=contents, config=config
+        )
+
+        return next(iter(stream), None), stream
+
+    def _call_stream(self, contents, config, on_text, light=False):
+        """
+        Like _call, but the answer arrives in pieces and on_text(piece)
+        is called as each piece of text comes in, so the user can read
+        (and hear) it before the model has finished. Models are still
+        tried in turn, as long as nothing has been shown yet.
+
+        Returns an object shaped like a normal response: .text,
+        .function_calls and .candidates[0].content.
+        """
+
+        order = self._order(light)
+
+        last_error = None
+
+        for attempt in range(2):
+
+            for model in self.pool.available(order):
+
+                try:
+
+                    first, stream = self._stream_attempt(model, contents, config)
+
+                    return self._collect(model, first, stream, on_text)
+
+                except _MidStreamError:
+
+                    # text was already shown: it cannot be taken back
+                    raise
+
+                except Exception as e:
+
+                    last_error = e
+
+                    if self.pool.mark_failed(model, str(e)) is None:
+                        raise
+
+            wait = self.pool.soonest_wait(order)
+
+            if attempt == 0 and 0 < wait <= self.MAX_WAIT_SECONDS:
+                time.sleep(wait)
+                continue
+
+            break
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError(
+            "429 RESOURCE_EXHAUSTED: all models are cooling down "
+            f"(retry in {self.pool.soonest_wait(order):.0f}s)"
+        )
+
+    def _collect(self, model, first, stream, on_text):
+
+        parts = []
+        text = []
+        calls = []
+        shown = False
+
+        def take(chunk):
+
+            nonlocal shown
+
+            if chunk is None or not chunk.candidates:
+                return
+
+            content = chunk.candidates[0].content
+
+            for part in (content.parts if content else None) or []:
+
+                parts.append(part)
+
+                if part.function_call:
+                    calls.append(part.function_call)
+
+                elif part.text and not part.thought:
+
+                    text.append(part.text)
+
+                    if on_text is not None:
+
+                        shown = True
+                        on_text(part.text)
+
+        try:
+
+            take(first)
+
+            for chunk in stream:
+                take(chunk)
+
+        except Exception as e:
+
+            if shown:
+                raise _MidStreamError(str(e)) from e
+
+            raise
+
+        self.pool.mark_ok(model)
+
+        return SimpleNamespace(
+            text="".join(text),
+            function_calls=calls or None,
+            candidates=[SimpleNamespace(
+                content=types.Content(role="model", parts=parts)
+            )],
+        )
+
     def _call(self, contents, config, light=False):
         """
         One generate_content request. If a model is out of quota or down,
@@ -181,7 +334,7 @@ class GeminiClient:
         return self._call(GeminiAdapter.convert(turns), config, light=light)
 
     def generate_with_tools(
-        self, conversation, system_instruction, registry, context
+        self, conversation, system_instruction, registry, context, on_text=None
     ):
         """
         Chat request where Gemini may call Sophia's tools.
@@ -211,7 +364,11 @@ class GeminiClient:
 
         for _ in range(self.MAX_TOOL_STEPS):
 
-            response = self._call(contents, config)
+            if on_text is not None:
+                response = self._call_stream(contents, config, on_text)
+
+            else:
+                response = self._call(contents, config)
 
             calls = response.function_calls
 

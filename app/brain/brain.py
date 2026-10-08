@@ -99,7 +99,7 @@ class Brain:
 
     # -----------------------------------------------------
 
-    def chat(self, conversation, system_instruction, context):
+    def chat(self, conversation, system_instruction, context, on_text=None):
         """
         Generate Sophia's reply.
         """
@@ -160,6 +160,7 @@ class Brain:
                 system_instruction,
                 registry=self.registry,
                 context=context,
+                on_text=on_text,
             )
 
             if not chat_result["success"]:

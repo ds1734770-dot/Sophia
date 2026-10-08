@@ -193,7 +193,7 @@ class Sophia:
 
         return text
 
-    def generate_response(self):
+    def generate_response(self, on_text=None):
         """
         Build Sophia's complete context and generate a response.
         """
@@ -204,10 +204,13 @@ class Sophia:
             history=self.memory.get_history()
         )
 
+        options = {"on_text": on_text} if on_text is not None else {}
+
         return self.brain.chat(
             conversation=conversation,
             system_instruction=self._system_instruction(),
-            context=self._make_context(self.pending_actions)
+            context=self._make_context(self.pending_actions),
+            **options,
         )
 
     # -----------------------------------------------------
@@ -320,9 +323,10 @@ class Sophia:
 
     # -----------------------------------------------------
 
-    def respond(self, user_input):
+    def respond(self, user_input, on_text=None):
         """
-        Handle one user message.
+        Handle one user message. on_text(piece) is called with the
+        answer as it is written, when it comes from Gemini.
 
         Returns {"response": str, "tool_used": bool}.
         """
@@ -337,7 +341,7 @@ class Sophia:
 
             self.process_user_message(user_input)
 
-            result = self.generate_response()
+            result = self.generate_response(on_text=on_text)
 
             log.info(
                 "turn tool_used=%s chat_success=%s",

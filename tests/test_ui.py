@@ -61,7 +61,7 @@ class FakeSophia:
     def start_services(self):
         self.started = True
 
-    def respond(self, text):
+    def respond(self, text, on_text=None):
 
         self.received.append(text)
 
@@ -372,3 +372,47 @@ def test_autostart_menu_item_toggles_the_setting(qapp):
     window.autostart_action.setChecked(False)
 
     assert not autostart.enabled
+
+
+class StreamingSophia(FakeSophia):
+
+    def respond(self, text, on_text=None):
+
+        for piece in ("Sure. I can ", "do that. ", "Almost done"):
+            on_text(piece)
+
+        return {"response": "Sure. I can do that. Almost done.", "tool_used": False}
+
+
+def test_the_answer_streams_into_one_bubble_and_is_spoken_by_sentence(qapp):
+
+    speaker = FakeSpeaker()
+    window, _ = make_window(qapp, StreamingSophia(), speaker=speaker)
+
+    window.voice_toggle.setChecked(True)
+    window.input.setPlainText("hello")
+    window.send_from_input()
+
+    assert pump(qapp, lambda: not window.busy)
+
+    replies = [text for role, text in bubbles(window) if role == "bot"]
+
+    # one bubble, holding the final text, never a duplicate
+    assert replies == ["Sure. I can do that. Almost done."]
+
+    # sentences were spoken as they completed, then the rest once
+    assert speaker.said == ["Sure.", "I can do that.", "Almost done."]
+
+
+def test_streamed_text_is_not_spoken_when_voice_is_off(qapp):
+
+    speaker = FakeSpeaker()
+    window, _ = make_window(qapp, StreamingSophia(), speaker=speaker)
+
+    window.voice_toggle.setChecked(False)
+    window.input.setPlainText("hello")
+    window.send_from_input()
+
+    assert pump(qapp, lambda: not window.busy)
+
+    assert speaker.said == []

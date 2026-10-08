@@ -12,6 +12,7 @@ class ChatEngine:
         system_instruction,
         registry=None,
         context=None,
+        on_text=None,
     ):
 
         try:
@@ -23,6 +24,7 @@ class ChatEngine:
                     system_instruction,
                     registry,
                     context,
+                    on_text=on_text,
                 )
 
                 return {

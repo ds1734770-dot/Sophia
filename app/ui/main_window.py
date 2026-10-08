@@ -1,5 +1,6 @@
 import logging
 import math
+import re
 
 from PySide6.QtCore import (
     QElapsedTimer,
@@ -51,6 +52,9 @@ MINI_CAR = (110, 40)
 ALERT_SECONDS = 1.6
 HISTORY_BUBBLES = 12
 MAX_INPUT_LINES = 5
+
+# A finished sentence in streamed text: ends with . ! or ? and a space
+SENTENCE_END = re.compile(r"(.+?[.!?])(?:\s+|$)", re.DOTALL)
 
 
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
@@ -261,6 +265,9 @@ class MainWindow(QMainWindow):
     # begins (the car uses it to come out of hiding)
     wake_activated = Signal()
 
+    # Text of Sophia's answer as Gemini writes it (from a worker thread)
+    partial = Signal(str)
+
     # For the floating orb: a reply (text, asks a question, offers
     # "always") and short hints such as "I didn't hear anything"
     replied = Signal(str, bool, bool)
@@ -297,6 +304,7 @@ class MainWindow(QMainWindow):
         self.busy = False
         self.recorder = None
         self.confirm_bar = None
+        self._stream = None
         self._quitting = False
 
         # the car shown in the chat window; the floating car has its own
@@ -320,6 +328,7 @@ class MainWindow(QMainWindow):
 
         self.notified.connect(self._on_notified)
         self.wake_heard.connect(self._on_wake)
+        self.partial.connect(self._on_partial)
 
         # animation clock for the orb
         self._clock = QElapsedTimer()
@@ -636,13 +645,77 @@ class MainWindow(QMainWindow):
         self.status.setText("Thinking...")
         self.chat.show_thinking()
 
-        run_task(self.sophia.respond, (text,), self._on_reply, self._on_reply_failed)
+        self._stream = {"bubble": None, "text": "", "spoken": 0}
+
+        run_task(
+            self.sophia.respond,
+            (text, self.partial.emit),
+            self._on_reply,
+            self._on_reply_failed,
+        )
+
+    def _wants_speech(self):
+
+        return self.speaker is not None and (
+            self.voice_toggle.isChecked() or self._voice_turn
+        )
+
+    def _on_partial(self, piece):
+        """
+        A piece of the answer arrived: show it at once, and speak each
+        sentence as soon as it is finished.
+        """
+
+        stream = getattr(self, "_stream", None)
+
+        if stream is None or not self.busy:
+            return
+
+        if stream["bubble"] is None:
+
+            self.chat.hide_thinking()
+
+            stream["bubble"] = self.chat.add("", "bot")
+
+            self.status.setText("Answering...")
+
+        stream["text"] += piece
+
+        stream["bubble"].set_text(stream["text"])
+        stream["bubble"].fit(max(240, int(self.chat.viewport().width() * 0.72)))
+
+        if self._wants_speech():
+
+            pending = stream["text"][stream["spoken"]:]
+
+            for match in SENTENCE_END.finditer(pending):
+
+                # the last sentence may still be growing
+                if match.end() >= len(pending) and not pending[-1:].isspace():
+                    break
+
+                self.speaker.say(match.group(1), interrupt=False)
+
+                stream["spoken"] += match.end()
 
     def _on_reply(self, result):
 
         self.chat.hide_thinking()
 
-        self.chat.add(result["response"], "bot", animate=True, typing=True)
+        stream = getattr(self, "_stream", None) or {"bubble": None}
+
+        streamed = stream["bubble"] is not None
+
+        if streamed:
+
+            # the final text replaces what was streamed (a tool may have
+            # changed the answer)
+            stream["bubble"].set_text(result["response"])
+            stream["bubble"].fit(max(240, int(self.chat.viewport().width() * 0.72)))
+
+        else:
+
+            self.chat.add(result["response"], "bot", animate=True, typing=True)
 
         self._maybe_add_confirm_bar()
 
@@ -663,10 +736,22 @@ class MainWindow(QMainWindow):
             self._kick("bounce")
 
         # Spoken replies when asked to, and always after a spoken request
-        if self.speaker is not None and (
-            self.voice_toggle.isChecked() or self._voice_turn
-        ):
-            self.speaker.say(result["response"])
+        if self._wants_speech():
+
+            said = stream.get("text", "")[:stream.get("spoken", 0)]
+
+            if streamed and said and result["response"].startswith(said):
+
+                # the start was spoken while it streamed: say the rest
+                rest = result["response"][len(said):].strip()
+
+                if rest:
+                    self.speaker.say(rest, interrupt=False)
+
+            else:
+                self.speaker.say(result["response"])
+
+        self._stream = None
 
         self._voice_turn = False
 

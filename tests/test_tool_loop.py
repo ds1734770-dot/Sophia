@@ -228,3 +228,138 @@ def test_read_only_calls_run_together_and_in_order(monkeypatch):
     assert [r.message for r in results] == ["A", "B", "C"]
     assert _time.time() - t < 0.5
     assert max(overlap) == 3
+
+
+# ---------------------------------------------------------------
+# Streaming
+# ---------------------------------------------------------------
+
+def chunk(text=None, call=None, thought=False):
+
+    part = types.Part(text=text, thought=True) if thought else (
+        types.Part(function_call=call) if call else types.Part(text=text)
+    )
+
+    return SimpleNamespace(candidates=[SimpleNamespace(
+        content=types.Content(role="model", parts=[part])
+    )])
+
+
+class StreamModels:
+
+    def __init__(self, streams):
+        self.streams = list(streams)
+        self.models = []
+
+    def generate_content_stream(self, model, contents, config):
+        self.models.append(model)
+        outcome = self.streams.pop(0)
+
+        if isinstance(outcome, Exception):
+            raise outcome
+
+        def gen():
+            for item in outcome:
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+
+        return gen()
+
+
+def make_stream(monkeypatch, streams, tool_ran=None):
+
+    models = StreamModels(streams)
+
+    class FakeGenaiClient:
+        def __init__(self, **kwargs):
+            self.models = models
+
+    monkeypatch.setattr(module.genai, "Client", FakeGenaiClient)
+    monkeypatch.setattr(module.GeminiClient, "_http", {})
+    monkeypatch.setattr(module.GeminiClient, "_pool", None)
+
+    registry = ToolRegistry()
+    registry.register(Tool(
+        name="open_application", description="open",
+        parameters={"name": {"type": "string"}}, required=["name"],
+        handler=lambda context, name: (tool_ran.append(name) if tool_ran is not None else None) or (True, f"Opening {name}"),
+    ))
+
+    return module.GeminiClient(), models, registry
+
+
+CONVO = [{"role": "user", "content": "hi"}]
+
+
+def test_text_arrives_piece_by_piece_and_in_full(monkeypatch):
+
+    client, models, registry = make_stream(
+        monkeypatch, [[chunk("Hello "), chunk("there."), chunk("", thought=True)]]
+    )
+
+    pieces = []
+
+    text, used = client.generate_with_tools(
+        CONVO, "", registry, ToolContext(), on_text=pieces.append
+    )
+
+    assert text == "Hello there." and not used
+    assert pieces == ["Hello ", "there."]
+
+
+def test_a_tool_call_inside_a_stream_is_run_and_the_answer_follows(monkeypatch):
+
+    ran = []
+
+    client, models, registry = make_stream(monkeypatch, [
+        [chunk(call=function_call("open_application", {"name": "notepad"}))],
+        [chunk("Done, "), chunk("opened.")],
+    ], tool_ran=ran)
+
+    pieces = []
+
+    text, used = client.generate_with_tools(
+        CONVO, "", registry, ToolContext(), on_text=pieces.append
+    )
+
+    assert ran == ["notepad"] and used
+    assert text == "Done, opened." and "".join(pieces) == "Done, opened."
+
+
+def test_stream_falls_back_to_the_next_model_before_any_text(monkeypatch):
+
+    client, models, registry = make_stream(monkeypatch, [
+        RuntimeError("429 RESOURCE_EXHAUSTED retry in 300s"),
+        [chunk("from backup")],
+    ])
+
+    client.chain = ["main", "backup"]
+
+    pieces = []
+
+    text, _ = client.generate_with_tools(
+        CONVO, "", registry, ToolContext(), on_text=pieces.append
+    )
+
+    assert text == "from backup" and models.models == ["main", "backup"]
+
+
+def test_a_stream_that_breaks_after_text_is_an_error_not_a_retry(monkeypatch):
+
+    import pytest
+
+    client, models, registry = make_stream(monkeypatch, [
+        [chunk("Half an ans"), RuntimeError("503 UNAVAILABLE")],
+        [chunk("a whole new answer")],
+    ])
+
+    client.chain = ["main", "backup"]
+
+    with pytest.raises(Exception):
+        client.generate_with_tools(
+            CONVO, "", registry, ToolContext(), on_text=lambda t: None
+        )
+
+    # the user already saw text, so a second model is not asked
+    assert models.models == ["main"]

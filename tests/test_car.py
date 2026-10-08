@@ -484,7 +484,7 @@ def test_the_car_celebrates_actions_and_shakes_on_errors():
 
     class Doing(FakeSophia):
 
-        def respond(self, text):
+        def respond(self, text, on_text=None):
 
             if text == "fail":
                 raise RuntimeError("boom")
