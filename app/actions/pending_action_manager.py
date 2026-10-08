@@ -9,11 +9,7 @@ class PendingActionManager:
 
     def start(self, action, matches, data=None):
 
-        self.pending.action = action
-
-        self.pending.matches = matches
-
-        self.pending.data = data or {}
+        self.pending.start(action, matches, data)
 
     def current(self):
 

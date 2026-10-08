@@ -7,6 +7,9 @@ class MemoryStorage:
 
     FILE_NAME = MEMORY_FILE
 
+    # Keep the saved history bounded
+    MAX_SAVED = 200
+
     @staticmethod
     def load():
 
@@ -15,7 +18,8 @@ class MemoryStorage:
 
         with open(
             MemoryStorage.FILE_NAME,
-            "r"
+            "r",
+            encoding="utf-8"
         ) as file:
 
             return json.load(file)
@@ -25,11 +29,12 @@ class MemoryStorage:
 
         with open(
             MemoryStorage.FILE_NAME,
-            "w"
+            "w",
+            encoding="utf-8"
         ) as file:
 
             json.dump(
-                history,
+                history[-MemoryStorage.MAX_SAVED:],
                 file,
                 indent=4
             )

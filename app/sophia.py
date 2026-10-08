@@ -1,5 +1,3 @@
-from multiprocessing import context
-
 from app.brain.tool_context import ToolContext
 from app.computer.application_manager import ApplicationManager
 from app.config.settings import Settings
@@ -146,15 +144,24 @@ class Sophia:
             self.memory.get_history()
         )
 
+    EXIT_WORDS = {"x", "exit", "quit", "bye"}
+
     def chat(self):
 
         while True:
 
-            user_input = input("\nYou: ")
+            try:
+                user_input = input("\nYou: ").strip()
 
-            if user_input.lower() in ["x","X"]:
+            except (EOFError, KeyboardInterrupt):
+                user_input = "x"
 
-                print(f"\n{self.settings.app_name}: Goodbye! 👋")
+            if not user_input:
+                continue
+
+            if user_input.lower() in self.EXIT_WORDS:
+
+                print(f"\n{self.settings.app_name}: Goodbye!")
 
                 break
 
@@ -167,13 +174,13 @@ class Sophia:
             result = self.generate_response()
 
             response = result["response"]
-            
+
             tool_used = result["tool_used"]
-            
+
             print(f"\n{self.settings.app_name}: {response}")
-            
+
             self.process_assistant_response(response)
-            
+
             # Only extract memory if NO tool was used
             if (not tool_used) and result["chat_success"]:
                 self.update_profile(user_input)

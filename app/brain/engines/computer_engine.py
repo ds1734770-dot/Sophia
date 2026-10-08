@@ -21,7 +21,13 @@ class ComputerEngine:
 
         if parsed.action == "open":
 
-            success, response = self.computer.open_app(
+            if not parsed.entity:
+                return {
+                    "handled": True,
+                    "response": "What would you like me to open?",
+                }
+
+            success, app_response = self.computer.open_app(
                 parsed.entity
             )
 
@@ -29,7 +35,7 @@ class ComputerEngine:
 
                 return {
                     "handled": True,
-                    "response": response,
+                    "response": app_response,
                 }
 
             success, response = self.computer.open_folder(
@@ -41,6 +47,22 @@ class ComputerEngine:
                 return {
                     "handled": True,
                     "response": response,
+                }
+
+            # Keep the "Did you mean ..." suggestions
+            if "Did you mean" in app_response:
+
+                return {
+                    "handled": True,
+                    "response": app_response,
+                }
+
+            # A long sentence is conversation, not an app name
+            if len(parsed.entity.split()) > 3:
+
+                return {
+                    "handled": False,
+                    "response": None,
                 }
 
             return {
@@ -56,6 +78,12 @@ class ComputerEngine:
         # --------------------------------------------------
 
         if parsed.action == "close":
+
+            if not parsed.entity:
+                return {
+                    "handled": True,
+                    "response": "What would you like me to close?",
+                }
 
             success, response = self.computer.close_app(
                 parsed.entity
@@ -77,6 +105,13 @@ class ComputerEngine:
                 return {
                     "handled": True,
                     "response": response,
+                }
+
+            if len(parsed.entity.split()) > 3:
+
+                return {
+                    "handled": False,
+                    "response": None,
                 }
 
             return {

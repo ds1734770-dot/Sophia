@@ -13,11 +13,11 @@ class ProfileStorage:
         if not os.path.exists(ProfileStorage.FILE_NAME):
             return {}
 
-        with open(ProfileStorage.FILE_NAME, "r") as file:
+        with open(ProfileStorage.FILE_NAME, "r", encoding="utf-8") as file:
             return json.load(file)
 
     @staticmethod
     def save(profile):
 
-        with open(ProfileStorage.FILE_NAME, "w") as file:
+        with open(ProfileStorage.FILE_NAME, "w", encoding="utf-8") as file:
             json.dump(profile, file, indent=4)

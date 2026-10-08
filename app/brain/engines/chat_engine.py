@@ -43,8 +43,14 @@ class ChatEngine:
                     ),
                 }
 
-            # Server busy
-            if "503" in error or "UNAVAILABLE" in error:
+            # Server busy or too slow
+            if (
+                "503" in error
+                or "504" in error
+                or "UNAVAILABLE" in error
+                or "DEADLINE_EXCEEDED" in error
+                or "timed out" in error.lower()
+            ):
 
                 return {
                     "success": False,

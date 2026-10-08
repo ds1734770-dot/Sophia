@@ -15,6 +15,8 @@ MEMORY_FILE = DATA_DIR / "memories.json"
 
 FILE_DATABASE = DATA_DIR / "file_database.json"
 
+SCHEDULE_FILE = DATA_DIR / "schedules.json"
+
 APPLICATION_DATABASE = DATA_DIR / "applications.json"
 
 # ------------------------
@@ -24,3 +26,5 @@ APPLICATION_DATABASE = DATA_DIR / "applications.json"
 CACHE_DIR = DATA_DIR / "cache"
 
 LOGS_DIR = DATA_DIR / "logs"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)

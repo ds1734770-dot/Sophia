@@ -1,11 +1,11 @@
 import json
-from pathlib import Path
+from app.settings.paths import SCHEDULE_FILE
 
 
 class ScheduleManager:
 
     def __init__(self):
-        self.file = Path("data/schedules.json")
+        self.file = SCHEDULE_FILE
         self.schedules = self.load()
 
     def load(self):
@@ -15,7 +15,7 @@ class ScheduleManager:
         try:
             with open(self.file, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except (OSError, ValueError):
             return {}
 
     def save(self):
