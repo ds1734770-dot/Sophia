@@ -442,6 +442,8 @@ class FloatingCar(QWidget):
         # sound effects (any object with play(name)); None is silent
         self.sounds = sounds
         self._was_interacting = False
+        self.suppress_listen_chime = False
+        self._quiet_arrival = False
         self.sound_action = None
 
         if sounds is not None:
@@ -582,14 +584,18 @@ class FloatingCar(QWidget):
 
         return QPoint(x, target.y()), from_left
 
-    def enter(self):
+    def enter(self, quiet=False):
         """
-        Drive in from the nearest screen edge and park.
+        Drive in from the nearest screen edge and park. quiet skips the
+        engine and honk sounds (the microphone would hear them).
         """
 
         self.hidden = False
 
-        self._play("entry")
+        if not quiet:
+            self._play("entry")
+
+        self._quiet_arrival = quiet
 
         start, from_left = self._edge_start(self.rest_pos)
 
@@ -602,7 +608,8 @@ class FloatingCar(QWidget):
 
         def arrived():
 
-            self._play("honk")
+            if not self._quiet_arrival:
+                self._play("honk")
 
             self.model.kick("honk")
             self.model.kick("bounce")
@@ -637,10 +644,10 @@ class FloatingCar(QWidget):
 
         self._drive(QPoint(self.x(), self.y()), target, HIDE_MS, QEasingCurve.InCubic, gone)
 
-    def show_back(self):
+    def show_back(self, quiet=False):
 
         if self.hidden or not self.isVisible():
-            self.enter()
+            self.enter(quiet=quiet)
 
     def toggle_visibility(self):
 
@@ -736,7 +743,14 @@ class FloatingCar(QWidget):
         if state in STATES:
 
             if state == "listening" and not self.listening:
-                self._play("listen")
+
+                # after the wake word there is no chime: the microphone
+                # is already open and would record it
+                if self.suppress_listen_chime:
+                    self.suppress_listen_chime = False
+
+                else:
+                    self._play("listen")
 
             if state == "thinking" and self.model.state != "thinking":
                 self._play("wiper")
@@ -1116,7 +1130,8 @@ class CarController(QObject):
 
     def __init__(self, window, car):
 
-        super().__init__()
+        # owned by the window, so it lives as long as the app does
+        super().__init__(window)
 
         self.window = window
         self.car = car
@@ -1132,6 +1147,8 @@ class CarController(QObject):
 
         car.card.answered.connect(self._answer)
 
+        window.wake_activated.connect(self._on_wake)
+
         window.replied.connect(self._on_reply)
         window.hint.connect(self._on_hint)
 
@@ -1143,6 +1160,19 @@ class CarController(QObject):
     def listen(self):
 
         self.window.start_voice_turn()
+
+    def _on_wake(self):
+        """
+        The wake word was heard: come out of hiding (silently, so the
+        microphone hears only the user) and clear any old answer.
+        """
+
+        self.car.suppress_listen_chime = True
+
+        self.car.card.dismiss()
+
+        if self.car.hidden or not self.car.isVisible():
+            self.car.show_back(quiet=True)
 
     def open_chat(self):
 

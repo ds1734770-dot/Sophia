@@ -257,6 +257,10 @@ class MainWindow(QMainWindow):
     # The wake word is heard on the audio thread
     wake_heard = Signal()
 
+    # Emitted when the wake word starts a request, before listening
+    # begins (the car uses it to come out of hiding)
+    wake_activated = Signal()
+
     # For the floating orb: a reply (text, asks a question, offers
     # "always") and short hints such as "I didn't hear anything"
     replied = Signal(str, bool, bool)
@@ -284,7 +288,8 @@ class MainWindow(QMainWindow):
         self.settings = settings or QSettings("Sophia", "Sophia")
         self.autostart = autostart or Autostart()
         self.wake_factory = wake_factory
-        self.beep = beep or _default_beep
+        # no sound by default: the beep would be recorded as speech
+        self.beep = beep
         self.wake_listener = None
         self._voice_turn = False
 
@@ -567,8 +572,10 @@ class MainWindow(QMainWindow):
         self._set_screen_confirm(self.screen_confirm_action.isChecked())
 
         # Remember hands-free across restarts
+        # Hands-free is on by default: Sophia answers to her wake word
+        # whenever she is running, even with the car hidden
         if self.wake_factory is not None and self.settings.value(
-            "hands_free", False, type=bool
+            "hands_free", True, type=bool
         ):
             self.hands_free_action.setChecked(True)
 
@@ -915,7 +922,12 @@ class MainWindow(QMainWindow):
         if not on and self.speaker is not None:
             self.speaker.stop()
 
-    def toggle_listening(self):
+    def toggle_listening(self, preroll=None, skip=None):
+        """
+        Start (or finish) listening. `preroll` is audio from just before
+        now (after a wake word) to keep; `skip` drops the first seconds
+        of capture (the start-up chime, when there is one).
+        """
 
         if self.recorder is not None:
 
@@ -932,7 +944,25 @@ class MainWindow(QMainWindow):
         try:
 
             self.recorder = self.recorder_factory()
-            self.recorder.start()
+
+            # tune the recorder to the room and to how it was started
+            if self.wake_listener is not None and hasattr(self.recorder, "noise_floor"):
+                self.recorder.noise_floor = self.wake_listener.noise_floor
+
+            if hasattr(self.recorder, "skip_seconds"):
+
+                if skip is None:
+
+                    # a button press plays a chime that the mic would hear
+                    skip = 0.0 if preroll is not None else 0.35
+
+                self.recorder.skip_seconds = skip
+
+            if preroll is not None:
+                self.recorder.start(preroll=preroll)
+
+            else:
+                self.recorder.start()
 
         except Exception as e:
 
@@ -1078,22 +1108,35 @@ class MainWindow(QMainWindow):
 
         self.chat.add(f"I couldn't start the wake word: {error}", "bot")
 
+        self.hint.emit(f"I couldn't start the wake word: {error}")
+
     def _on_wake(self):
 
         # Heard the wake word: listen for the request
         if self.wake_listener is None or self.busy or self.recorder is not None:
             return
 
-        self.wake_listener.pause()
+        listener = self.wake_listener
+
+        # what was said right after the wake word, so no words are lost
+        preroll = None
+
+        if getattr(listener, "last_wake_time", None) is not None and hasattr(listener, "audio_since"):
+            preroll = listener.audio_since(listener.last_wake_time - 0.1)
+
+        listener.pause()
 
         if self.speaker is not None:
             self.speaker.stop()
 
-        self.beep()
+        self.wake_activated.emit()
+
+        if self.beep is not None:
+            self.beep()
 
         self._voice_turn = True
 
-        self.toggle_listening()
+        self.toggle_listening(preroll=preroll if preroll is not None and len(preroll) else None, skip=0.0)
 
     def _resume_wake_when_quiet(self, tries=0):
         """

@@ -149,6 +149,16 @@ def block(seconds, level):
     return np.full(int(SAMPLE_RATE * seconds), level, dtype="float32")
 
 
+def tone(seconds, level=0.1):
+    """
+    Something that is not silence once the DC offset is removed.
+    """
+
+    t = np.arange(int(SAMPLE_RATE * seconds)) / SAMPLE_RATE
+
+    return (level * np.sin(2 * np.pi * 220 * t)).astype("float32")
+
+
 class FakeStream:
 
     def __init__(self):
@@ -233,7 +243,7 @@ def test_transcriber_loads_once_and_joins_segments():
         return FakeModel()
 
     transcriber = Transcriber("tiny.en", model_factory=factory)
-    audio = block(1, 0.1)
+    audio = tone(1)
 
     assert transcriber.transcribe(audio) == "open notepad"
     assert transcriber.transcribe(audio) == "open notepad"

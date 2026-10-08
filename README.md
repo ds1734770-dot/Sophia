@@ -93,9 +93,11 @@ Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program 
 
 ## Voice
 
-- **Speech recognition** runs on your PC with [faster-whisper](https://github.com/SYSTRAN/faster-whisper): audio never leaves the computer and uses no quota. The model (about 140 MB for `base.en`) downloads the first time you use the microphone.
+- **Hands-free is on by default.** Say **"Hey Jarvis"** at any time while Sophia is running: with the car on screen it starts listening at once; with the car hidden (Alt+S) it drives out silently and listens. A spoken request gets a spoken reply. Turn it off in the chat menu (Hands-free).
+- **Speech recognition** runs on your PC with [faster-whisper](https://github.com/SYSTRAN/faster-whisper): audio never leaves the computer and uses no quota. The model (about 140 MB for `base.en`) downloads the first time. To improve accuracy it levels quiet microphone audio, adapts to the room's background noise, keeps the first words of your request after the wake word, tells Whisper which commands to expect, and discards noise it would otherwise turn into phrases like "thank you". On a test set of spoken commands in four accents with a quiet, noisy microphone this cut word errors from 16.8% to 12.5%. `WHISPER_MODEL=small.en` is slightly more accurate but about three times slower.
+- **The wake word keeps running:** the model runs on its own thread, the microphone is reopened automatically if it stops (sleep and wake, device changes), and errors are logged to `data/logs/sophia.log` instead of ending the listener.
 - **Spoken replies** use Microsoft Edge's neural voices (natural, needs internet) and fall back to the offline Windows voice. Pick a voice with `TTS_VOICE`.
-- **Hands-free:** menu > "Hands-free (wake word)" listens for "Hey Jarvis" with a small local model ([openwakeword](https://github.com/dscripka/openWakeWord)); a spoken request gets a spoken reply. Say it clearly near the microphone; lower `WAKE_THRESHOLD` if it misses you. A custom "Hey Sophia" word needs a trained model.
+- The wake word model is [openwakeword](https://github.com/dscripka/openWakeWord) ("Hey Jarvis"); lower `WAKE_THRESHOLD` if it misses you. A custom "Hey Sophia" word needs a trained model.
 
 ## Gemini quota
 
