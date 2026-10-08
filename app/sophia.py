@@ -17,6 +17,8 @@ from app.memory.summary_storage import SummaryStorage
 from app.context.context_builder import ContextBuilder
 
 from app.memory.memory_filter import MemoryFilter
+from app.brain.model_pool import UsageTracker
+from app.settings.paths import USAGE_FILE
 
 from app.actions.pending_action_manager import PendingActionManager
 from app.computer.application_indexer import ApplicationIndexer
@@ -81,6 +83,10 @@ class Sophia:
         Extract important user facts.
         This should NEVER interrupt Sophia.
         """
+
+        # Saves an AI request for the many messages with no personal fact
+        if not MemoryFilter.should_extract(user_input):
+            return
 
         try:
 
@@ -153,6 +159,13 @@ class Sophia:
 
     EXIT_WORDS = {"x", "exit", "quit", "bye"}
 
+    def usage_report(self):
+        """
+        How many AI requests were made today, per model.
+        """
+
+        return UsageTracker(USAGE_FILE).report()
+
     def chat(self):
 
         while True:
@@ -171,6 +184,12 @@ class Sophia:
                 print(f"\n{self.settings.app_name}: Goodbye!")
 
                 break
+
+            if user_input.lower() == "usage":
+
+                print(f"\n{self.settings.app_name}: {self.usage_report()}")
+
+                continue
 
             # Save user message
             self.process_user_message(

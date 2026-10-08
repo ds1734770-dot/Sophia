@@ -23,7 +23,8 @@ class MemoryEngine:
 
         response = self.client.generate(
             conversation,
-            PromptManager.memory_prompt()
+            PromptManager.memory_prompt(),
+            light=True,
         )
 
         try:

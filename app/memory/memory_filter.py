@@ -1,48 +1,39 @@
+import re
+
+
 class MemoryFilter:
+    """
+    Decides whether a message might contain a lasting personal fact.
 
-    IGNORE_PREFIXES = [
+    Extraction costs an AI request, so it only runs for messages that
+    sound like the user talking about themselves.
+    """
 
-        "open",
-        "close",
-        "lock",
-        "shutdown",
-        "restart",
-
-        "search",
-
-        "calculate",
-
-        "what is",
-        "what's",
-
-        "time",
-        "date",
-
-        "who is",
-
-        "tell me",
-
-        "explain",
-
-        "summarize",
-
-        "read",
-
-    ]
+    PERSONAL = re.compile(
+        r"\b("
+        r"my (?:name|favou?rite|birthday|age|major|course|college|"
+        r"university|school|job|goal|hobby|hobbies|city|country|dream|"
+        r"friend|brother|sister|mother|father|mom|dad)"
+        r"|i am|i'm|i was|i live|i study|i work|i like|i love|i hate|"
+        r"i prefer|i enjoy|i use|i want to (?:learn|become|be)|"
+        r"call me|remember (?:that|this)|from now on|actually my"
+        r")\b",
+        re.IGNORECASE,
+    )
 
     @classmethod
     def should_extract(cls, text):
 
-        text = text.lower().strip()
+        text = text.strip()
 
-        # Ignore short messages
+        # Too short to hold a fact
         if len(text.split()) <= 2:
             return False
 
-        # Ignore commands
-        for prefix in cls.IGNORE_PREFIXES:
+        # Commands and pure questions carry no facts about the user
+        if text.endswith("?") and not re.search(
+            r"remember|my name", text, re.IGNORECASE
+        ):
+            return False
 
-            if text.startswith(prefix):
-                return False
-
-        return True
+        return bool(cls.PERSONAL.search(text))

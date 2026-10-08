@@ -6,6 +6,12 @@ load_dotenv()
 DEFAULT_MODEL = "gemini-3.5-flash"
 DEFAULT_TIMEOUT_SECONDS = 30
 
+# Each model has its own free quota, so extra models are extra capacity.
+DEFAULT_FALLBACK_MODELS = "gemini-3-flash-preview,gemini-3.1-flash-lite"
+
+# Cheap model for background work (memory extraction, summaries).
+DEFAULT_LIGHT_MODEL = "gemini-3.1-flash-lite"
+
 
 class Settings:
     def __init__(self):
@@ -17,6 +23,14 @@ class Settings:
         # AI
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
         self.model_name = os.getenv("MODEL_NAME") or DEFAULT_MODEL
+        self.fallback_models = [
+            m.strip()
+            for m in (
+                os.getenv("FALLBACK_MODELS") or DEFAULT_FALLBACK_MODELS
+            ).split(",")
+            if m.strip()
+        ]
+        self.light_model = os.getenv("LIGHT_MODEL") or DEFAULT_LIGHT_MODEL
         self.request_timeout = int(
             os.getenv("REQUEST_TIMEOUT") or DEFAULT_TIMEOUT_SECONDS
         )

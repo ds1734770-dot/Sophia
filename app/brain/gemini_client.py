@@ -3,18 +3,23 @@ import time
 from google import genai
 from google.genai import types
 
-from app.config.settings import Settings
 from app.adapters.gemini_adapter import GeminiAdapter
+from app.brain.model_pool import ModelPool, UsageTracker
+from app.config.settings import Settings
+from app.settings.paths import USAGE_FILE
 
 
 class GeminiClient:
 
-    MAX_ATTEMPTS = 3
-    RETRY_DELAY_SECONDS = 1.5
-    RETRYABLE_MARKERS = ("503", "UNAVAILABLE")
-
     # How many model <-> tool round trips one message may use
     MAX_TOOL_STEPS = 5
+
+    # If every model is cooling down but one is back within this many
+    # seconds, wait for it instead of failing.
+    MAX_WAIT_SECONDS = 5
+
+    # One pool per process, so cooldowns are shared by every client
+    _pool = None
 
     def __init__(self):
         self.settings = Settings()
@@ -26,34 +31,83 @@ class GeminiClient:
             ),
         )
 
+        self.chain = [self.settings.model_name] + self.settings.fallback_models
+
+        if GeminiClient._pool is None:
+            GeminiClient._pool = ModelPool(
+                self.chain, usage=UsageTracker(USAGE_FILE)
+            )
+
+        self.pool = GeminiClient._pool
+
     # ------------------------------------------------
 
-    def _call(self, contents, config):
+    def _order(self, light):
         """
-        One generate_content request, retrying temporary server errors.
+        Models to try, best first. Background work starts with the
+        cheap model so it never competes with chat for quota.
         """
 
-        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+        order = list(self.chain)
 
-            try:
+        if light:
+            order = [self.settings.light_model] + order
 
-                return self.client.models.generate_content(
-                    model=self.settings.model_name,
-                    contents=contents,
-                    config=config,
-                )
+        return list(dict.fromkeys(order))
 
-            except Exception as e:
+    def _call(self, contents, config, light=False):
+        """
+        One generate_content request. If a model is out of quota or down,
+        the next model in the chain is tried.
+        """
 
-                retryable = any(
-                    marker in str(e)
-                    for marker in self.RETRYABLE_MARKERS
-                )
+        order = self._order(light)
 
-                if not retryable or attempt == self.MAX_ATTEMPTS:
-                    raise
+        last_error = None
 
-                time.sleep(self.RETRY_DELAY_SECONDS * attempt)
+        for attempt in range(2):
+
+            for model in self.pool.available(order):
+
+                try:
+
+                    response = self.client.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=config,
+                    )
+
+                except Exception as e:
+
+                    last_error = e
+
+                    # Errors that are not the model's fault (bad
+                    # request, bad key) would fail on every model.
+                    if self.pool.mark_failed(model, str(e)) is None:
+                        raise
+
+                    continue
+
+                self.pool.mark_ok(model)
+
+                return response
+
+            # Everything is cooling down: wait briefly if one returns soon
+            wait = self.pool.soonest_wait(order)
+
+            if attempt == 0 and 0 < wait <= self.MAX_WAIT_SECONDS:
+                time.sleep(wait)
+                continue
+
+            break
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError(
+            "429 RESOURCE_EXHAUSTED: all models are cooling down "
+            f"(retry in {self.pool.soonest_wait(order):.0f}s)"
+        )
 
     @staticmethod
     def _system_text(conversation, system_instruction):
@@ -66,7 +120,7 @@ class GeminiClient:
 
     # ------------------------------------------------
 
-    def generate(self, conversation, system_instruction):
+    def generate(self, conversation, system_instruction, light=False):
         """
         Plain chat request.
 
@@ -84,7 +138,7 @@ class GeminiClient:
             system_instruction=system_text
         )
 
-        return self._call(GeminiAdapter.convert(turns), config)
+        return self._call(GeminiAdapter.convert(turns), config, light=light)
 
     def generate_with_tools(
         self, conversation, system_instruction, registry, context
