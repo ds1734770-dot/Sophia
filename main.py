@@ -27,7 +27,12 @@ def main():
 
     from app.ui.app import run_gui
 
-    sys.exit(run_gui(voice="--no-voice" not in sys.argv))
+    sys.exit(
+        run_gui(
+            voice="--no-voice" not in sys.argv,
+            minimized="--minimized" in sys.argv,
+        )
+    )
 
 
 if __name__ == "__main__":

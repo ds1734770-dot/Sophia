@@ -119,6 +119,18 @@ class FakeTranscriber:
         return self.text
 
 
+class FakeAutostart:
+
+    def __init__(self):
+        self.enabled = False
+
+    def is_enabled(self):
+        return self.enabled
+
+    def set_enabled(self, value):
+        self.enabled = value
+
+
 def make_window(qapp, sophia=None, **kwargs):
 
     sophia = sophia or FakeSophia()
@@ -127,6 +139,7 @@ def make_window(qapp, sophia=None, **kwargs):
         lambda: sophia,
         settings=QSettings(tempfile.mktemp(suffix=".ini"), QSettings.IniFormat),
         use_tray=False,
+        autostart=FakeAutostart(),
         **kwargs,
     )
 
@@ -315,7 +328,10 @@ def test_startup_failure_is_explained(qapp):
         raise RuntimeError("no api key")
 
     window = MainWindow(
-        broken, settings=QSettings(tempfile.mktemp(suffix=".ini"), QSettings.IniFormat), use_tray=False
+        broken,
+        settings=QSettings(tempfile.mktemp(suffix=".ini"), QSettings.IniFormat),
+        use_tray=False,
+        autostart=FakeAutostart(),
     )
 
     assert pump(qapp, lambda: any("could not start" in t for _, t in bubbles(window)))
@@ -332,3 +348,25 @@ def test_quit_closes_the_speaker(qapp, monkeypatch):
     window.quit()
 
     assert speaker.closed
+
+
+def test_autostart_menu_item_toggles_the_setting(qapp):
+
+    autostart = FakeAutostart()
+
+    window = MainWindow(
+        lambda: FakeSophia(),
+        settings=QSettings(tempfile.mktemp(suffix=".ini"), QSettings.IniFormat),
+        use_tray=False,
+        autostart=autostart,
+    )
+
+    assert not window.autostart_action.isChecked()
+
+    window.autostart_action.setChecked(True)
+
+    assert autostart.enabled
+
+    window.autostart_action.setChecked(False)
+
+    assert not autostart.enabled

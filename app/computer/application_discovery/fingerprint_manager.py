@@ -1,6 +1,5 @@
 import hashlib
 import json
-from pathlib import Path
 
 from app.settings.paths import APPLICATION_DATABASE
 

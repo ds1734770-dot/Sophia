@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.computer.autostart import Autostart
 from app.ui import theme
 from app.ui.widgets import ChatView
 
@@ -195,6 +196,7 @@ class MainWindow(QMainWindow):
         transcriber=None,
         settings=None,
         use_tray=True,
+        autostart=None,
     ):
 
         super().__init__()
@@ -204,6 +206,7 @@ class MainWindow(QMainWindow):
         self.recorder_factory = recorder_factory
         self.transcriber = transcriber
         self.settings = settings or QSettings("Sophia", "Sophia")
+        self.autostart = autostart or Autostart()
 
         self.sophia = None
         self.busy = False
@@ -314,11 +317,17 @@ class MainWindow(QMainWindow):
         clear = QAction("Clear chat view", self)
         clear.triggered.connect(self.chat.clear)
 
+        self.autostart_action = QAction("Start with Windows", self)
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.setChecked(self.autostart.is_enabled())
+        self.autostart_action.toggled.connect(self.autostart.set_enabled)
+
         quit_action = QAction("Quit Sophia", self)
         quit_action.triggered.connect(self.quit)
 
         menu.addAction(usage)
         menu.addAction(clear)
+        menu.addAction(self.autostart_action)
         menu.addSeparator()
         menu.addAction(quit_action)
 

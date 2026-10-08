@@ -3,7 +3,6 @@ Sophia's tool set. Each tool wraps an existing manager and is given a
 safety tier (see app.tools.registry.Risk).
 """
 
-import os
 import re
 from datetime import datetime
 from pathlib import Path

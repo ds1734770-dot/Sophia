@@ -1,9 +1,7 @@
-import threading
 import time
 from types import SimpleNamespace
 
 import numpy as np
-import pytest
 
 from app.voice.listener import SAMPLE_RATE, Recorder, Transcriber
 from app.voice.speaker import MAX_SPOKEN_CHARS, Speaker, speakable

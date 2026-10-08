@@ -1,4 +1,3 @@
-import re
 
 from app.brain.command_parser.action_parser import ActionParser
 

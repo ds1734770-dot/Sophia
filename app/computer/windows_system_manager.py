@@ -1,7 +1,5 @@
-from pathlib import Path
 import winreg
 import os
-from pathlib import Path
 
 class WindowsSystemManager:
 

@@ -91,7 +91,7 @@ def create_sophia():
     return Sophia()
 
 
-def run_gui(voice=True):
+def run_gui(voice=True, minimized=False):
 
     from app.config.settings import Settings
     from app.logging_setup import setup_logging
@@ -141,7 +141,9 @@ def run_gui(voice=True):
     else:
         log.info("No free global hotkey; use the tray icon instead")
 
-    window.show()
+    # Started by Windows at sign-in: stay in the tray until summoned
+    if not (minimized and window.tray is not None):
+        window.show()
 
     code = app.exec()
 

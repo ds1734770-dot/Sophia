@@ -1,9 +1,5 @@
-from importlib.resources import path
 import os
-import subprocess
 import ctypes
-from pathlib import Path
-from app.computer.windows_folders import WindowsFolders
 from app.computer.explorer_window_manager import ExplorerWindowManager
 from app.computer.windows_system_manager import WindowsSystemManager
 from app.computer.application_manager import ApplicationManager
