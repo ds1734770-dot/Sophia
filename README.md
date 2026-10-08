@@ -18,6 +18,8 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 | Reminders and routines | "Remind me at 6pm", "Timer for 10 minutes", "Every weekday at 8 give me a morning briefing" |
 | Notes and to-dos | "Add a to-do: finish report", "Note that the exam is on Monday" |
 | System | "Volume to 30", "Battery and memory?", "Take a screenshot", "Play lofi on YouTube", "Pause the music" |
+| Everyday lookups | "Convert 5 miles to km", "100 USD to INR", "Define serendipity", "Tell me about the Porsche 911", "Latest news about cricket" |
+| This PC | "What is using the most memory?", "Force-close notepad", "What is filling my disk?", "Am I online?", "Zip this folder", "Switch to dark mode", "Make me a password" |
 | Clipboard | "Fix the grammar of what I copied" |
 | Memory | "Remember I prefer Python", "What do you know about me?", "Forget my city" |
 | Voice | Click the mic, or say "Hey Jarvis" in hands-free mode; natural spoken replies |
@@ -49,7 +51,7 @@ Sophia can launch any program on your PC (she shows the path, whether it is sign
 
 ## How it decides what to do
 
-Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. A few exact commands ("open notepad", "what time is it", "12*(5+8)") are answered locally and instantly without using any AI quota; anything vague goes to Gemini.
+Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. Exact commands ("open notepad", "what time is it", "12*(5+8)", "volume to 30", "pause", "timer for 10 minutes", "weather", "battery", "convert 5 miles to km", "define word") are answered locally in a fraction of a second without using any AI quota; anything vague goes to Gemini. Gemini replies are faster too: one shared connection, a low thinking level (`THINKING_LEVEL`), and several lookups at once when it asks for them together.
 
 ## Safety
 
@@ -134,6 +136,7 @@ Environment variables or `.env`:
 | `FALLBACK_MODELS` | `gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.1-flash-lite` | Used when the main model is out of quota |
 | `LIGHT_MODEL` | `gemini-3.1-flash-lite` | Memory extraction and summaries |
 | `REQUEST_TIMEOUT` | `30` | Seconds before a request is given up |
+| `THINKING_LEVEL` | `low` | How long Gemini thinks (`minimal`, `low`, `medium`, `high`; lower is faster) |
 | `WHISPER_MODEL` | `base.en` | Local speech model (`tiny.en` is smaller and faster) |
 | `TTS_VOICE` | `en-IN-NeerjaNeural` | Neural voice for replies |
 | `NEURAL_VOICE` | `true` | Set to `false` to always use the offline Windows voice |

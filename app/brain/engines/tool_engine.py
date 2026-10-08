@@ -2,6 +2,7 @@ from app.brain.engines.calculator_engine import CalculatorEngine
 from app.brain.engines.time_engine import TimeEngine
 from app.brain.engines.computer_engine import ComputerEngine
 from app.brain.engines.browser_engine import BrowserEngine
+from app.brain.engines.quick_engine import QuickEngine
 
 
 class ToolEngine:
@@ -18,12 +19,14 @@ class ToolEngine:
         self.time = TimeEngine()
         self.browser_engine = BrowserEngine()
         self.computer_engine = ComputerEngine()
+        self.quick = QuickEngine()
 
         # Known websites come before app matching, so "open youtube"
         # opens the site instead of guessing an app.
         self.engines = [
             self.calculator,
             self.time,
+            self.quick,
             self.browser_engine,
             self.computer_engine,
         ]
