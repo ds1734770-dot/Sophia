@@ -6,6 +6,7 @@ from app.computer.search.application_ranker import ApplicationRanker
 from app.computer.search.confidence_evaluator import ConfidenceEvaluator
 
 from app.computer.semantic.semantic_index import SemanticIndex
+from app.computer.builtin_apps import merge_builtin
 
 
 class ApplicationManager:
@@ -65,7 +66,7 @@ class ApplicationManager:
 
     def open(self, app_name):
 
-        applications = self.indexer.load()
+        applications = merge_builtin(self.indexer.load())
 
         applications = self.semantic.build(applications)
 

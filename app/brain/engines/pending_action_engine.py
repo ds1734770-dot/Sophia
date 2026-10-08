@@ -17,15 +17,28 @@ class PendingActionEngine:
 
         if pending.action == "rename":
 
+            if command.strip().lower() in ("cancel", "no", "stop"):
+
+                context.pending_actions.clear()
+
+                return {
+                    "handled": True,
+                    "response": "Okay, cancelled.",
+                }
+
             try:
 
                 choice = int(command.strip()) - 1
 
             except ValueError:
 
+                # Not an answer: drop the question and treat the
+                # message as a normal request.
+                context.pending_actions.clear()
+
                 return {
-                    "handled": True,
-                    "response": "Please enter a valid number.",
+                    "handled": False,
+                    "response": None,
                 }
 
             if choice < 0 or choice >= len(pending.matches):

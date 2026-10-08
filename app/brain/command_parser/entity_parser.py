@@ -1,24 +1,28 @@
+import re
+
+from app.brain.command_parser.action_parser import ActionParser
+
+
 class EntityParser:
+    """
+    Extract the thing a command is about ("open my downloads folder"
+    -> "downloads"). Works on whole words only.
+    """
+
+    NOISE = {"my", "the", "a", "an", "up", "for", "me", "please"}
+
+    SUFFIXES = {"app", "application", "program", "folder", "software"}
 
     def parse(self, text):
 
-        text = text.lower()
+        words = ActionParser.clean(text).split()
 
-        for word in (
+        # Drop the action verb
+        words = words[1:]
 
-            "open",
-            "launch",
-            "start",
-            "run",
+        words = [w for w in words if w not in self.NOISE]
 
-            "please",
-            "can",
-            "could",
-            "you",
-            "my"
+        while words and words[-1] in self.SUFFIXES and len(words) > 1:
+            words.pop()
 
-        ):
-
-            text = text.replace(word, "")
-
-        return text.strip()
+        return " ".join(words).strip()

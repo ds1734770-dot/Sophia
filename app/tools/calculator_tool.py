@@ -1,4 +1,5 @@
 from app.tools.base_tool import BaseTool
+from app.brain.engines.calculator_engine import safe_eval
 
 
 class CalculatorTool(BaseTool):
@@ -10,11 +11,7 @@ class CalculatorTool(BaseTool):
     def run(self, expression, **kwargs):
 
         try:
-            return eval(
-                expression,
-                {"__builtins__": {}},
-                {}
-            )
+            return safe_eval(expression)
 
         except Exception as e:
             return f"Calculation Error: {e}"

@@ -20,3 +20,6 @@ __pycache__/
 # OS Files
 .DS_Store
 Thumbs.db
+# Personal runtime data (history, profile, file index, app index)
+data/
+summary.json
