@@ -455,7 +455,7 @@ def test_capture_png_downscales_and_stays_in_memory(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_look_at_screen_needs_confirmation_then_asks_vision(registry_env, tmp_path):
+def test_look_at_screen_asks_vision_directly_by_default(registry_env, tmp_path):
 
     context, _, _, _ = registry_env
 
@@ -466,13 +466,7 @@ def test_look_at_screen_needs_confirmation_then_asks_vision(registry_env, tmp_pa
         vision=lambda question: asked.append(question) or "a terminal showing an error",
     )
 
-    first = registry.execute("look_at_screen", {"question": "what error?"}, context)
+    result = registry.execute("look_at_screen", {"question": "what error?"}, context)
 
-    assert first.needs_confirmation
-    assert "send it to Gemini" in first.message
-    assert asked == []
-
-    second = registry.execute("look_at_screen", {"question": "what error?"}, context, confirmed=True)
-
-    assert second.message == "a terminal showing an error"
+    assert result.message == "a terminal showing an error"
     assert asked == ["what error?"]

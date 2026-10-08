@@ -12,6 +12,7 @@ from app.file.path_guard import (
     allowed_roots,
     is_safe_name,
 )
+from app.file.program_info import LAUNCHABLE, NEVER_LAUNCHED, describe
 from app.tools.registry import Risk, Tool
 
 STRING = {"type": "string"}
@@ -77,7 +78,7 @@ def _read_text(path, limit):
     return True, text
 
 
-def register_file_tools(registry, files, search, guard, undo=None):
+def register_file_tools(registry, files, search, guard, undo=None, program_info=describe):
 
     def remember(description, action):
 
@@ -400,6 +401,44 @@ def register_file_tools(registry, files, search, guard, undo=None):
             return False, "I won't open programs or scripts. Open those yourself."
 
         return files.open_file(target)
+
+    def launch_program(context, path):
+
+        target = guard.for_read(path)
+
+        if target is None or not target.is_file():
+            return False, "That program does not exist or is not readable."
+
+        suffix = target.suffix.lower()
+
+        if suffix in NEVER_LAUNCHED:
+            return False, (
+                f"I won't run {suffix} files (scripts and libraries can "
+                "hide what they do). Open them yourself if you trust them."
+            )
+
+        if suffix not in LAUNCHABLE:
+            return False, "That is not a program. Use open_file for documents."
+
+        return files.open_file(target)
+
+    registry.register(Tool(
+        name="launch_program",
+        description=(
+            "Launch a program (.exe, .lnk shortcut, .msi installer, "
+            ".bat or .cmd) from its full path, for example one found "
+            "with find_files in Downloads. For installed apps by name "
+            "use open_application instead."
+        ),
+        parameters={"path": STRING},
+        required=["path"],
+        risk=Risk.CONFIRM,
+        preview=lambda a: (
+            f"I'm about to launch {a['path']} "
+            f"({program_info(a['path'])})."
+        ),
+        handler=launch_program,
+    ))
 
     registry.register(Tool(
         name="create_folder",

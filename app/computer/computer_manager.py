@@ -141,6 +141,18 @@ class ComputerManager:
 
     def open_folder(self, folder_name):
 
+        # any real folder path, not just the well-known ones
+        if os.path.isdir(folder_name.strip().strip('"')):
+
+            path = folder_name.strip().strip('"')
+
+            try:
+                os.startfile(path)
+                return True, f"Opening {path}..."
+
+            except Exception as e:
+                return False, str(e)
+
         folder_name = folder_name.lower().strip()
 
         path = self.windows.get_folder(folder_name)

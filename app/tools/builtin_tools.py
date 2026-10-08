@@ -40,6 +40,7 @@ def build_default_registry(
     reminders=None,
     screen=None,
     undo=None,
+    screen_policy=None,
 ):
     """
     Create the registry with every built-in tool.
@@ -329,6 +330,11 @@ def build_default_registry(
             parameters={"question": STRING},
             required=["question"],
             risk=Risk.CONFIRM,
+            # By default she may look when a request needs it; the user
+            # can switch on "ask first" in the menu.
+            risk_fn=lambda a: (
+                Risk.CONFIRM if (screen_policy or {}).get("confirm") else Risk.SAFE
+            ),
             preview=lambda a: (
                 "I'm about to take a screenshot of your screen and send "
                 f"it to Gemini to answer: \"{a['question']}\""

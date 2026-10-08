@@ -426,6 +426,13 @@ class MainWindow(QMainWindow):
         )
         self.hands_free_action.toggled.connect(self._set_hands_free)
 
+        self.screen_confirm_action = QAction("Ask before looking at my screen", self)
+        self.screen_confirm_action.setCheckable(True)
+        self.screen_confirm_action.setChecked(
+            self.settings.value("screen_confirm", False, type=bool)
+        )
+        self.screen_confirm_action.toggled.connect(self._set_screen_confirm)
+
         self.autostart_action = QAction("Start with Windows", self)
         self.autostart_action.setCheckable(True)
         self.autostart_action.setChecked(self.autostart.is_enabled())
@@ -437,6 +444,7 @@ class MainWindow(QMainWindow):
         menu.addAction(usage)
         menu.addAction(clear)
         menu.addAction(self.hands_free_action)
+        menu.addAction(self.screen_confirm_action)
         menu.addAction(self.autostart_action)
         menu.addSeparator()
         menu.addAction(quit_action)
@@ -520,11 +528,22 @@ class MainWindow(QMainWindow):
 
         self._set_ready(True, "Ready")
 
+        self._set_screen_confirm(self.screen_confirm_action.isChecked())
+
         # Remember hands-free across restarts
         if self.wake_factory is not None and self.settings.value(
             "hands_free", False, type=bool
         ):
             self.hands_free_action.setChecked(True)
+
+    def _set_screen_confirm(self, on):
+
+        self.settings.setValue("screen_confirm", on)
+
+        brain = getattr(self.sophia, "brain", None)
+
+        if brain is not None and hasattr(brain, "screen_policy"):
+            brain.screen_policy["confirm"] = bool(on)
 
     def _on_start_failed(self, error):
 

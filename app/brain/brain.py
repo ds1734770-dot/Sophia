@@ -51,6 +51,9 @@ class Brain:
 
         self.undo = UndoStack()
 
+        # Does looking at the screen need a yes first? (menu setting)
+        self.screen_policy = {"confirm": False}
+
         self.screen = ScreenControl(
             capture_png=self.system_controls.capture_png,
             locate=self.chat_engine.client.locate_point,
@@ -72,6 +75,7 @@ class Brain:
             reminders=(self.timers, self.routines),
             screen=self.screen,
             undo=self.undo,
+            screen_policy=self.screen_policy,
         )
 
 
