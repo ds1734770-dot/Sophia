@@ -13,6 +13,7 @@ Answers appear in a small text card above the car and are spoken.
 import logging
 
 from PySide6.QtCore import (
+    QPointF,
     QEasingCurve,
     QElapsedTimer,
     QObject,
@@ -28,13 +29,13 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QColor,
     QCursor,
-    QFont,
     QGuiApplication,
     QPainter,
     QPainterPath,
     QPen,
 )
 from PySide6.QtWidgets import (
+    QToolTip,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -48,22 +49,42 @@ from app.ui.car import CANVAS_W, STATES, CarModel, draw_car
 
 log = logging.getLogger("sophia.ui")
 
-WIDTH = 300
-HEIGHT = 236
+DEFAULT_WIDTH = 130      # the window (and the car drawing) is this wide
+MIN_WIDTH = 70
+MAX_WIDTH = 300
 
-# where the car is drawn inside the window
-CAR_RECT = QRect(0, 22, WIDTH, 106)
+SIZES = {"Tiny": 96, "Small": 130, "Medium": 180, "Large": 250}
 
-# the part of the window that counts as "on the car"
-CAR_HIT = QRect(26, 40, 248, 92)
-
-BUTTON_SIZE = 42
-BUTTON_GAP = 16
-BUTTON_Y = 152
 BUTTON_LABELS = ("Voice", "Chat", "Hide")
 
-# logical canvas pixels per screen pixel
-LOGICAL_PER_PIXEL = CANVAS_W / CAR_RECT.width()
+
+class Layout:
+    """
+    All sizes in the window, scaled from its width. At 300 the car is
+    drawn at the size of the first version; the default is much smaller.
+    """
+
+    def __init__(self, width):
+
+        width = max(MIN_WIDTH, min(MAX_WIDTH, int(width)))
+
+        k = width / 300
+
+        self.width = width
+        self.height = round(236 * k)
+
+        # where the car is drawn, and the part that counts as "on the car"
+        self.car_rect = QRect(0, round(22 * k), width, round(106 * k))
+        self.car_hit = QRect(round(26 * k), round(40 * k), round(248 * k), round(92 * k))
+
+        # three small round buttons below the car
+        self.button = max(15, round(42 * k * 0.8))
+        self.gap = max(5, round(16 * k * 0.8))
+        self.button_y = round(138 * k) + 6
+
+        # canvas pixels per screen pixel (for wheel rotation)
+        self.logical_per_pixel = CANVAS_W / width
+
 
 FRAME_MS = 16
 LEAVE_LINGER_MS = 650
@@ -325,36 +346,39 @@ class SpeechCard(QWidget):
 # Button icons
 # ---------------------------------------------------------------
 
-def _draw_icon(painter, kind, center, color):
+def _draw_icon(painter, kind, center, color, size=42):
     """
-    Small line icons drawn in code: mic, chat and hide (a chevron).
+    Small line icons drawn in code (mic, chat, hide), scaled to the
+    button they sit in.
     """
 
-    pen = QPen(QColor(color), 2.2)
+    painter.save()
+    painter.translate(center)
+    painter.scale(size / 42, size / 42)
+
+    pen = QPen(QColor(color), 3.2)
     pen.setCapStyle(Qt.RoundCap)
     pen.setJoinStyle(Qt.RoundJoin)
 
     painter.setPen(pen)
     painter.setBrush(Qt.NoBrush)
 
-    cx, cy = center.x(), center.y()
-
     if kind == "Voice":
 
         painter.setBrush(QColor(color))
-        painter.drawRoundedRect(QRectF(cx - 4, cy - 10, 8, 14), 4, 4)
+        painter.drawRoundedRect(QRectF(-4.5, -11, 9, 15), 4.5, 4.5)
         painter.setBrush(Qt.NoBrush)
-        painter.drawArc(QRectF(cx - 8, cy - 7, 16, 14), 200 * 16, 140 * 16)
-        painter.drawLine(cx, cy + 7, cx, cy + 11)
-        painter.drawLine(cx - 4, cy + 11, cx + 4, cy + 11)
+        painter.drawArc(QRectF(-9, -8, 18, 15), 200 * 16, 140 * 16)
+        painter.drawLine(0, 7, 0, 12)
+        painter.drawLine(-4, 12, 4, 12)
 
     elif kind == "Chat":
 
         path = QPainterPath()
-        path.addRoundedRect(QRectF(cx - 10, cy - 9, 20, 15), 5, 5)
-        path.moveTo(cx - 4, cy + 6)
-        path.lineTo(cx - 7, cy + 11)
-        path.lineTo(cx + 1, cy + 6)
+        path.addRoundedRect(QRectF(-11, -10, 22, 16), 6, 6)
+        path.moveTo(-5, 6)
+        path.lineTo(-8, 12)
+        path.lineTo(1, 6)
 
         painter.drawPath(path)
 
@@ -362,13 +386,15 @@ def _draw_icon(painter, kind, center, color):
         painter.setPen(Qt.NoPen)
 
         for dx in (-5, 0, 5):
-            painter.drawEllipse(QPoint(cx + dx, cy - 1), 1, 1)
+            painter.drawEllipse(QPointF(dx, -2), 1.3, 1.3)
 
     else:   # Hide
 
-        painter.drawLine(cx - 7, cy - 3, cx, cy + 4)
-        painter.drawLine(cx, cy + 4, cx + 7, cy - 3)
-        painter.drawLine(cx - 8, cy + 9, cx + 8, cy + 9)
+        painter.drawLine(-8, -4, 0, 4)
+        painter.drawLine(0, 4, 8, -4)
+        painter.drawLine(-9, 10, 9, 10)
+
+    painter.restore()
 
 
 # ---------------------------------------------------------------
@@ -382,7 +408,7 @@ class FloatingCar(QWidget):
     hide_requested = Signal()
     quit_requested = Signal()
 
-    def __init__(self, settings=None, cursor=QCursor.pos):
+    def __init__(self, settings=None, cursor=QCursor.pos, sounds=None, width=None):
 
         super().__init__(
             None,
@@ -401,7 +427,33 @@ class FloatingCar(QWidget):
 
         self.model = CarModel()
 
-        self.setFixedSize(WIDTH, HEIGHT)
+        saved_width = self.settings.value("car_width")
+
+        try:
+            start_width = int(width or saved_width or DEFAULT_WIDTH)
+
+        except (TypeError, ValueError):
+            start_width = DEFAULT_WIDTH
+
+        self.lay = Layout(start_width)
+
+        self.setFixedSize(self.lay.width, self.lay.height)
+
+        # sound effects (any object with play(name)); None is silent
+        self.sounds = sounds
+        self._was_interacting = False
+        self.sound_action = None
+
+        if sounds is not None:
+
+            from PySide6.QtGui import QAction
+
+            self.sound_action = QAction("Sound effects", self)
+            self.sound_action.setCheckable(True)
+            self.sound_action.setChecked(self.settings.value("sounds", True, type=bool))
+            self.sound_action.toggled.connect(self._set_sounds)
+
+            sounds.set_enabled(self.sound_action.isChecked())
 
         self.card = SpeechCard()
         self.card.clicked.connect(self.chat_requested)
@@ -480,9 +532,9 @@ class FloatingCar(QWidget):
         A parked car looks toward the middle of its screen.
         """
 
-        area = nearest_rect(self.rest_pos + QPoint(WIDTH // 2, HEIGHT // 2))
+        area = nearest_rect(self.rest_pos + QPoint(self.lay.width // 2, self.lay.height // 2))
 
-        self.model.facing = -1 if self.rest_pos.x() + WIDTH // 2 > area.center().x() else 1
+        self.model.facing = -1 if self.rest_pos.x() + self.lay.width // 2 > area.center().x() else 1
 
     # ------------------------------------------------
     # Driving animations
@@ -522,11 +574,11 @@ class FloatingCar(QWidget):
         Also turns the car to face the way it will drive.
         """
 
-        area = nearest_rect(target + QPoint(WIDTH // 2, HEIGHT // 2))
+        area = nearest_rect(target + QPoint(self.lay.width // 2, self.lay.height // 2))
 
-        from_left = target.x() + WIDTH // 2 < area.center().x()
+        from_left = target.x() + self.lay.width // 2 < area.center().x()
 
-        x = area.left() - WIDTH - 20 if from_left else area.right() + 20
+        x = area.left() - self.lay.width - 20 if from_left else area.right() + 20
 
         return QPoint(x, target.y()), from_left
 
@@ -536,6 +588,8 @@ class FloatingCar(QWidget):
         """
 
         self.hidden = False
+
+        self._play("entry")
 
         start, from_left = self._edge_start(self.rest_pos)
 
@@ -548,8 +602,11 @@ class FloatingCar(QWidget):
 
         def arrived():
 
+            self._play("honk")
+
             self.model.kick("honk")
             self.model.kick("bounce")
+            self.model.kick("wipe")
 
             self._face_the_middle()
 
@@ -564,6 +621,8 @@ class FloatingCar(QWidget):
             return
 
         self.hidden = True
+
+        self._play("hide")
 
         self.card.dismiss()
 
@@ -604,6 +663,8 @@ class FloatingCar(QWidget):
         if self._animation is not None:
             self._animation.stop()
 
+        self._play("exit")
+
         self.model.facing = 1
         self.model.kick("honk")
         self.model.kick("shake")
@@ -631,6 +692,41 @@ class FloatingCar(QWidget):
     # Per-frame update
     # ------------------------------------------------
 
+    def on_effect(self, kind):
+        """
+        An effect requested by the chat window (a task finished, an
+        error...): show it on the car, with its sound.
+        """
+
+        self.model.kick(kind)
+
+        if kind == "burst":
+            self._play("success")
+
+        elif kind == "honk":
+            self._play("honk")
+
+    def _set_sounds(self, on):
+
+        self.settings.setValue("sounds", on)
+
+        if self.sounds is not None:
+
+            self.sounds.set_enabled(on)
+
+            if on:
+                self._play("click")
+
+    def _play(self, name):
+
+        if self.sounds is not None:
+
+            try:
+                self.sounds.play(name)
+
+            except Exception:
+                log.exception("Sound failed")
+
     def set_activity(self, state, level):
         """
         What Sophia is doing (from the chat window): idle, listening,
@@ -639,14 +735,29 @@ class FloatingCar(QWidget):
 
         if state in STATES:
 
+            if state == "listening" and not self.listening:
+                self._play("listen")
+
+            if state == "thinking" and self.model.state != "thinking":
+                self._play("wiper")
+
             self.model.set_state(state)
             self.model.set_level(level)
 
             self.listening = state == "listening"
 
+    def car_screen_rect(self):
+        """
+        The car's body in screen coordinates.
+        """
+
+        hit = self.lay.car_hit
+
+        return QRect(self.x() + hit.x(), self.y() + hit.y(), hit.width(), hit.height())
+
     def _hover_zone(self):
 
-        zone = QRect(CAR_HIT)
+        zone = QRect(self.lay.car_hit)
 
         if self.interact > 0.05:
             zone = zone.united(self._buttons_zone())
@@ -655,17 +766,46 @@ class FloatingCar(QWidget):
 
     def _buttons_zone(self):
 
-        total = 3 * BUTTON_SIZE + 2 * BUTTON_GAP
+        lay = self.lay
 
-        return QRect((WIDTH - total) // 2 - 10, BUTTON_Y - 14, total + 20, BUTTON_SIZE + 34)
+        total = 3 * lay.button + 2 * lay.gap
+
+        return QRect((lay.width - total) // 2 - 6, lay.button_y - 8, total + 12, lay.button + 16)
 
     def button_rect(self, index):
 
-        total = 3 * BUTTON_SIZE + 2 * BUTTON_GAP
+        lay = self.lay
 
-        x = (WIDTH - total) // 2 + index * (BUTTON_SIZE + BUTTON_GAP)
+        total = 3 * lay.button + 2 * lay.gap
 
-        return QRect(x, BUTTON_Y, BUTTON_SIZE, BUTTON_SIZE)
+        x = (lay.width - total) // 2 + index * (lay.button + lay.gap)
+
+        return QRect(x, lay.button_y, lay.button, lay.button)
+
+    def set_width(self, width):
+        """
+        Resize the whole car (keeps its centre where it was).
+        """
+
+        old = self.lay
+
+        self.lay = Layout(width)
+
+        self.settings.setValue("car_width", self.lay.width)
+
+        center = QPoint(self.x() + old.width // 2, self.y() + old.height // 2)
+
+        self.setFixedSize(self.lay.width, self.lay.height)
+
+        self.move(clamp_to_screens(
+            QPoint(center.x() - self.lay.width // 2, center.y() - self.lay.height // 2),
+            self.size(),
+        ))
+
+        self.save_position()
+        self._last_x = self.x()
+
+        self.update()
 
     def _tick(self):
 
@@ -674,7 +814,7 @@ class FloatingCar(QWidget):
         self._now += dt
 
         # driving: tell the model how far we moved (in canvas pixels)
-        dx = (self.x() - self._last_x) * LOGICAL_PER_PIXEL
+        dx = (self.x() - self._last_x) * self.lay.logical_per_pixel
 
         self._last_x = self.x()
 
@@ -691,7 +831,15 @@ class FloatingCar(QWidget):
 
             inside = self._hover_zone().contains(local)
 
-            self._hovered_button = self._button_at(local) if self.interact > 0.5 else None
+            hovered = self._button_at(local) if self.interact > 0.5 else None
+
+            if hovered != self._hovered_button and hovered is not None:
+
+                QToolTip.showText(
+                    self._cursor() + QPoint(0, 18), BUTTON_LABELS[hovered], self
+                )
+
+            self._hovered_button = hovered
 
         else:
 
@@ -718,6 +866,13 @@ class FloatingCar(QWidget):
 
         self.model.hover = self.interact > 0.4
 
+        if self.model.hover and not self._was_interacting:
+
+            self._play("hover")
+            self.model.kick("wipe")
+
+        self._was_interacting = self.model.hover
+
         if self.isVisible():
             self.update()
 
@@ -743,9 +898,9 @@ class FloatingCar(QWidget):
         # mouse (fully transparent pixels let clicks fall through)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(0, 0, 0, 3))
-        painter.drawRect(CAR_HIT)
+        painter.drawRect(self.lay.car_hit)
 
-        draw_car(painter, QRectF(CAR_RECT), self.model)
+        draw_car(painter, QRectF(self.lay.car_rect), self.model)
 
         if self.interact > 0.02:
             self._draw_buttons(painter)
@@ -756,8 +911,8 @@ class FloatingCar(QWidget):
 
         t = self.interact
 
-        # ease out with a little overshoot, and slide up from the car
-        slide = (1 - t) * 14
+        # slide up from under the car as they appear
+        slide = (1 - t) * 6
 
         painter.setOpacity(min(1.0, t * 1.3))
 
@@ -769,7 +924,7 @@ class FloatingCar(QWidget):
             pressed = self._pressed_button == i
             active = label == "Voice" and self.listening
 
-            scale = 1.0 + (0.12 if hovered else 0.0) - (0.06 if pressed else 0.0)
+            scale = 1.0 + (0.15 if hovered else 0.0) - (0.08 if pressed else 0.0)
 
             painter.save()
             painter.translate(rect.center())
@@ -778,25 +933,15 @@ class FloatingCar(QWidget):
 
             fill = QColor("#ff5c6c") if active else QColor(YELLOW if hovered else theme.PANEL)
 
-            painter.setPen(QPen(QColor(theme.BORDER if not hovered else YELLOW), 1.2))
+            painter.setPen(QPen(QColor(theme.BORDER if not hovered else YELLOW), 1.0))
             painter.setBrush(fill)
             painter.drawEllipse(rect)
 
             icon_color = "#1a1a1f" if (hovered or active) else "#f1f3f8"
 
-            _draw_icon(painter, label, rect.center().toPoint(), icon_color)
+            _draw_icon(painter, label, rect.center(), icon_color, rect.width())
 
             painter.restore()
-
-            font = QFont("Segoe UI", 8)
-            painter.setFont(font)
-            painter.setPen(QColor(theme.MUTED if not hovered else theme.TEXT))
-
-            painter.drawText(
-                QRectF(rect.left() - 10, rect.bottom() + 4, rect.width() + 20, 14),
-                Qt.AlignCenter,
-                label,
-            )
 
         painter.setOpacity(1.0)
 
@@ -819,7 +964,7 @@ class FloatingCar(QWidget):
 
             return
 
-        if CAR_HIT.contains(point):
+        if self.lay.car_hit.contains(point):
 
             self.dragging = True
             self._grab_offset = event.globalPosition().toPoint() - QPoint(self.x(), self.y())
@@ -856,6 +1001,8 @@ class FloatingCar(QWidget):
 
         if pressed is not None and self._button_at(point) == pressed:
 
+            self._play("click")
+
             if pressed == 0:
                 self.voice_requested.emit()
 
@@ -877,7 +1024,7 @@ class FloatingCar(QWidget):
         if self.dragging or self.driving:
             return
 
-        anchor = QRect(self.x() + CAR_HIT.x(), self.y() + CAR_HIT.y(), CAR_HIT.width(), CAR_HIT.height())
+        anchor = self.car_screen_rect()
 
         self.card.show_message(text, anchor, confirm, allow_always)
 
@@ -905,6 +1052,18 @@ class FloatingCar(QWidget):
 
         if self.hands_free_action is not None:
             menu.addAction(self.hands_free_action)
+
+        sizes = menu.addMenu("Size")
+
+        for label, width in SIZES.items():
+
+            action = sizes.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(abs(self.lay.width - width) < 8)
+            action.triggered.connect(lambda _=False, w=width: self.set_width(w))
+
+        if self.sound_action is not None:
+            menu.addAction(self.sound_action)
 
         reset = menu.addAction("Reset position")
         reset.triggered.connect(self.reset_position)
@@ -964,7 +1123,7 @@ class CarController(QObject):
         self.car = car
 
         window.activity_listeners.append(car.set_activity)
-        window.effect_listeners.append(car.model.kick)
+        window.effect_listeners.append(car.on_effect)
         window.hide_on_close = True
 
         car.voice_requested.connect(self.listen)
@@ -990,7 +1149,7 @@ class CarController(QObject):
 
         self.car.card.dismiss()
 
-        rect = QRect(self.car.x() + CAR_HIT.x(), self.car.y() + CAR_HIT.y(), CAR_HIT.width(), CAR_HIT.height())
+        rect = self.car.car_screen_rect()
 
         dock_beside(self.window, rect)
 

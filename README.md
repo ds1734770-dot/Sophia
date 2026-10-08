@@ -38,6 +38,9 @@ python main.py --chat     # classic chat window instead
 - **Alt+S** hides the car or brings it back (change it with `HIDE_HOTKEY`, for example `ctrl+alt+o`). The tray icon does the same.
 - **Answers** appear as a small text card above the car and are spoken. Questions get Yes / No / Always allow buttons on the card.
 - The car shows what Sophia is doing: bright cool headlights that follow your voice while listening, blinking hazard lights while thinking, brake lights glowing while speaking, a headlight flash and sparkles when a task is done, a shudder on an error.
+- **It is small on purpose** (130 px wide) with three tiny buttons that show their name as a tooltip. Right-click > Size picks Tiny, Small, Medium or Large, or set `CAR_WIDTH` (70 to 300).
+- **Windscreen wiper:** it sweeps when you hover, when the car parks, and the whole time Sophia is thinking.
+- **Sound effects** (generated in code, no files): engine arriving, a rev when you hover, a honk when it parks, a wiper swish, button clicks, a chime when listening starts and another when a task succeeds, a rev-and-launch when it leaves. Right-click > Sound effects mutes them; `SOUND_VOLUME` (0 to 1) sets the level. Preview them all with `python -m app.ui.sounds` (add a folder name to also save them as .wav files).
 - **Right-click** the car for a menu (open chat, talk, hide, spoken replies, hands-free, reset position, quit). The car never takes keyboard focus, so it will not interrupt what you are typing elsewhere.
 
 The welcome screen in the chat window shows the car too, with tap-to-send ideas; it folds into the header after your first message and replies are typed out word by word.
@@ -135,6 +138,9 @@ Environment variables or `.env`:
 | `WAKE_WORD` | `hey_jarvis` | Wake word model |
 | `WAKE_THRESHOLD` | `0.5` | Lower is more sensitive |
 | `HIDE_HOTKEY` | `alt+s` | Global shortcut that hides or shows the car |
+| `CAR_WIDTH` | `130` | Width of the car in pixels (70 to 300) |
+| `SOUND_EFFECTS` | `true` | Turn the car's sound effects on or off |
+| `SOUND_VOLUME` | `0.6` | Sound effect volume (0 to 1) |
 | `SOPHIA_HOME` | `./data` | Where history, profile, notes and logs are kept |
 
 Your data (chat history, profile, notes, schedule, routines, logs) lives in `data/` and is git-ignored.

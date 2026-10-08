@@ -6,21 +6,22 @@ import tempfile
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QEvent, QPoint, QPointF, QSize, QSettings, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QSize, QSettings, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 
 from app.ui.floating_car import (
-    BUTTON_Y,
-    CAR_HIT,
-    HEIGHT,
-    WIDTH,
+    DEFAULT_WIDTH,
+    SIZES,
     CarController,
+    Layout,
     FloatingCar,
     SpeechCard,
     clamp_to_screens,
     screen_rects,
 )
+LAY = Layout(DEFAULT_WIDTH)
+
 from app.ui.hotkey import MOD_ALT, MOD_CONTROL, parse_hotkey
 from app.ui.main_window import MainWindow
 from tests.test_ui import (
@@ -80,7 +81,7 @@ def press_release(car, point):
 
 def hover(app, car, mouse):
 
-    mouse.pos = car.mapToGlobal(QPoint(WIDTH // 2, 90))
+    mouse.pos = car.mapToGlobal(LAY.car_hit.center())
 
     assert pump(app, lambda: car.interact > 0.9)
 
@@ -123,7 +124,7 @@ def test_it_is_a_small_always_on_top_window_that_does_not_steal_focus():
     assert flags & Qt.WindowStaysOnTopHint
     assert flags & Qt.FramelessWindowHint
     assert flags & Qt.WindowDoesNotAcceptFocus
-    assert car.size() == QSize(WIDTH, HEIGHT)
+    assert car.size() == QSize(LAY.width, LAY.height)
 
 
 def test_the_car_is_kept_on_screen():
@@ -131,11 +132,11 @@ def test_the_car_is_kept_on_screen():
     qapp()
 
     area = screen_rects()[0]
-    size = QSize(WIDTH, HEIGHT)
+    size = QSize(LAY.width, LAY.height)
 
     far = clamp_to_screens(QPoint(area.right() + 9000, area.bottom() + 9000), size)
 
-    assert area.contains(far) and area.contains(far + QPoint(WIDTH, HEIGHT))
+    assert area.contains(far) and area.contains(far + QPoint(LAY.width, LAY.height))
     assert clamp_to_screens(QPoint(-9000, -9000), size).x() >= area.left()
 
 
@@ -181,7 +182,7 @@ def test_dragging_moves_the_car_and_the_car_drives_while_moving():
 
     car.move(100, 100)
 
-    start = QPoint(WIDTH // 2, 90)
+    start = LAY.car_hit.center()
 
     car.mousePressEvent(mouse_event(QEvent.MouseButtonPress, start, car))
 
@@ -217,7 +218,7 @@ def test_dropping_remembers_where_and_parks_facing_the_middle():
 
     car.move(area.left() + 30, area.top() + 40)
 
-    point = QPoint(WIDTH // 2, 90)
+    point = LAY.car_hit.center()
 
     car.mousePressEvent(mouse_event(QEvent.MouseButtonPress, point, car))
     car.mouseReleaseEvent(mouse_event(QEvent.MouseButtonRelease, point, car))
@@ -241,7 +242,7 @@ def test_clicking_the_car_itself_does_nothing_else():
     for signal in (car.voice_requested, car.chat_requested, car.hide_requested):
         signal.connect(lambda: seen.append(1))
 
-    press_release(car, QPoint(WIDTH // 2, 90))
+    press_release(car, LAY.car_hit.center())
 
     assert seen == []
 
@@ -357,7 +358,7 @@ def test_the_buttons_area_paints():
     hover(app, car, mouse)
 
     assert not car.grab().isNull()
-    assert BUTTON_Y > CAR_HIT.bottom() - 40
+    assert LAY.button_y > LAY.car_hit.bottom() - 40
 
 
 # ---------------------------------------------------------------
@@ -467,7 +468,7 @@ def test_dragging_is_ignored_while_the_car_is_driving():
 
     car.enter()
 
-    car.mousePressEvent(mouse_event(QEvent.MouseButtonPress, QPoint(WIDTH // 2, 90), car))
+    car.mousePressEvent(mouse_event(QEvent.MouseButtonPress, LAY.car_hit.center(), car))
 
     assert not car.dragging
 
@@ -489,7 +490,7 @@ def test_the_card_shows_above_the_car_and_fades_away():
 
     assert card.isVisible() and card.label.text() == "Opened YouTube."
     assert not card.buttons.isVisible()
-    assert card.y() < car.y() + CAR_HIT.top()
+    assert card.y() < car.y() + LAY.car_hit.top()
 
     card.fade_out()
 
@@ -724,3 +725,228 @@ def test_quitting_from_the_menu_drives_away_then_quits(monkeypatch):
     assert car.driving or car.model.hover
 
     assert pump(app, lambda: window._quitting, seconds=5)
+
+
+# ---------------------------------------------------------------
+# Size
+# ---------------------------------------------------------------
+
+def test_the_default_car_is_small_and_the_buttons_are_tiny():
+
+    car = make_car()
+
+    assert car.lay.width == DEFAULT_WIDTH == 130
+    assert car.size() == QSize(car.lay.width, car.lay.height)
+    assert car.lay.height < 120
+    assert 15 <= car.lay.button <= 22
+
+
+def test_layout_scales_everything_from_the_width():
+
+    small, big = Layout(100), Layout(250)
+
+    assert small.height < big.height
+    assert small.button < big.button
+    assert small.car_rect.width() == 100 and big.car_rect.width() == 250
+    assert Layout(5).width == 70 and Layout(5000).width == 300      # limits
+
+
+def test_buttons_fit_inside_the_window_at_every_size():
+
+    for width in list(SIZES.values()) + [70, 300]:
+
+        lay = Layout(width)
+
+        car_window = QRect(0, 0, lay.width, lay.height)
+
+        for i in range(3):
+
+            total = 3 * lay.button + 2 * lay.gap
+            x = (lay.width - total) // 2 + i * (lay.button + lay.gap)
+
+            assert car_window.contains(QRect(x, lay.button_y, lay.button, lay.button))
+
+
+def test_resizing_keeps_the_centre_remembers_and_updates_the_layout():
+
+    app = qapp()
+
+    settings = fresh_settings()
+    car = make_car(settings=settings)
+
+    area = screen_rects()[0]
+    car.move(area.center().x() - 100, area.center().y() - 60)
+
+    before = car.frameGeometry().center()
+
+    car.set_width(SIZES["Large"])
+
+    assert car.lay.width == 250 and car.width() == 250
+    assert abs(car.frameGeometry().center().x() - before.x()) <= 2
+    assert int(settings.value("car_width")) == 250
+
+    again = FloatingCar(settings=settings, cursor=FakeMouse())
+
+    assert again.lay.width == 250
+
+
+def test_buttons_still_work_after_resizing():
+
+    app = qapp()
+
+    mouse = FakeMouse()
+    car = make_car(mouse)
+
+    car.set_width(SIZES["Medium"])
+
+    seen = []
+    car.chat_requested.connect(lambda: seen.append("chat"))
+
+    mouse.pos = car.mapToGlobal(QPoint(car.lay.width // 2, 60))
+
+    assert pump(app, lambda: car.interact > 0.9)
+
+    press_release(car, car.button_rect(1).center())
+
+    assert seen == ["chat"]
+
+
+# ---------------------------------------------------------------
+# Sounds
+# ---------------------------------------------------------------
+
+class FakeSounds:
+
+    def __init__(self):
+        self.played = []
+        self.enabled = True
+
+    def play(self, name):
+        self.played.append(name)
+
+    def set_enabled(self, on):
+        self.enabled = on
+
+
+def make_car_with_sounds(mouse=None):
+
+    qapp()
+
+    sounds = FakeSounds()
+
+    car = FloatingCar(settings=fresh_settings(), cursor=mouse or FakeMouse(), sounds=sounds)
+    car.show()
+
+    return car, sounds
+
+
+def test_entering_plays_the_engine_then_a_honk_on_arrival():
+
+    app = qapp()
+
+    car, sounds = make_car_with_sounds()
+
+    car.enter()
+
+    assert sounds.played[0] == "entry"
+
+    assert pump(app, lambda: "honk" in sounds.played, seconds=4)
+
+
+def test_hovering_revs_once_and_wipes():
+
+    app = qapp()
+
+    mouse = FakeMouse()
+    car, sounds = make_car_with_sounds(mouse)
+
+    mouse.pos = car.mapToGlobal(QPoint(car.lay.width // 2, 50))
+
+    assert pump(app, lambda: "hover" in sounds.played)
+
+    pump(app, lambda: False, seconds=0.3)
+
+    assert sounds.played.count("hover") == 1
+    assert car.model.wipe_time > 0 or car.model.wiper > 0
+
+
+def test_buttons_click_and_hiding_and_exiting_have_sounds():
+
+    app = qapp()
+
+    mouse = FakeMouse()
+    car, sounds = make_car_with_sounds(mouse)
+
+    mouse.pos = car.mapToGlobal(QPoint(car.lay.width // 2, 50))
+    assert pump(app, lambda: car.interact > 0.9)
+
+    press_release(car, car.button_rect(2).center())
+
+    assert "click" in sounds.played
+
+    car.hide_away()
+
+    assert "hide" in sounds.played
+
+    other, other_sounds = make_car_with_sounds()
+
+    other.exit_and_quit(lambda: None)
+
+    assert "exit" in other_sounds.played
+
+
+def test_listening_and_thinking_and_success_have_sounds():
+
+    app = qapp()
+
+    car, sounds = make_car_with_sounds()
+
+    car.set_activity("listening", 0.2)
+    car.set_activity("listening", 0.4)           # only the start chimes
+
+    car.set_activity("thinking", 0.0)
+
+    car.on_effect("burst")
+
+    assert sounds.played == ["listen", "wiper", "success"]
+
+
+def test_the_sound_switch_in_the_menu_mutes_and_is_remembered():
+
+    app = qapp()
+
+    settings = fresh_settings()
+    sounds = FakeSounds()
+
+    car = FloatingCar(settings=settings, cursor=FakeMouse(), sounds=sounds)
+
+    assert car.sound_action.isChecked() and sounds.enabled
+
+    car.sound_action.setChecked(False)
+
+    assert not sounds.enabled
+    assert settings.value("sounds", True, type=bool) is False
+
+    again = FloatingCar(settings=settings, cursor=FakeMouse(), sounds=FakeSounds())
+
+    assert not again.sound_action.isChecked()
+
+
+def test_a_broken_sound_device_never_breaks_the_car():
+
+    app = qapp()
+
+    class Broken:
+
+        def play(self, name):
+            raise OSError("no audio device")
+
+        def set_enabled(self, on):
+            pass
+
+    car = FloatingCar(settings=fresh_settings(), cursor=FakeMouse(), sounds=Broken())
+    car.show()
+
+    car.enter()
+
+    assert pump(app, lambda: not car.driving, seconds=4)

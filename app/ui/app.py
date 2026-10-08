@@ -169,7 +169,11 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
 
         from app.ui.floating_car import CarController, FloatingCar
 
-        car = FloatingCar(settings=window.settings)
+        from app.ui.sounds import SoundMixer
+
+        mixer = SoundMixer(enabled=settings.sound_effects, volume=settings.sound_volume)
+
+        car = FloatingCar(settings=window.settings, sounds=mixer, width=settings.car_width)
         controller = CarController(window, car)
 
         if window.tray is not None:

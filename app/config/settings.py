@@ -40,6 +40,9 @@ class Settings:
         self.wake_word = os.getenv("WAKE_WORD") or DEFAULT_WAKE_WORD
         self.wake_threshold = float(os.getenv("WAKE_THRESHOLD") or 0.5)
         self.hide_hotkey = os.getenv("HIDE_HOTKEY") or "alt+s"
+        self.sound_effects = (os.getenv("SOUND_EFFECTS") or "true").lower() not in ("0", "false", "no")
+        self.sound_volume = float(os.getenv("SOUND_VOLUME") or 0.6)
+        self.car_width = int(os.getenv("CAR_WIDTH") or 0) or None
         self.model_name = os.getenv("MODEL_NAME") or DEFAULT_MODEL
         self.fallback_models = [
             m.strip()

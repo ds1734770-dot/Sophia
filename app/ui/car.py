@@ -36,6 +36,9 @@ CANVAS_H = 170
 CAR_X = 40
 
 WHEEL_RADIUS = 26
+
+# one wipe there and back
+WIPER_SWEEP_SECONDS = 0.9
 FRONT_WHEEL = (298, 114)
 REAR_WHEEL = (102, 114)
 GROUND_Y = 143
@@ -94,6 +97,11 @@ class CarModel:
         self.flash_time = 0.0      # honk: headlights flash twice
         self.brake = 0.0           # brake lights
 
+        # windscreen wiper: 0 is parked, 1 is fully swept
+        self.wiper = 0.0
+        self.wipe_time = 0.0
+        self._wipe_clock = 0.0
+
         self.particles = []
         self._smoke_timer = 0.0
 
@@ -131,6 +139,11 @@ class CarModel:
         elif kind == "honk":
 
             self.flash_time = 0.9
+
+        elif kind == "wipe":
+
+            # two sweeps
+            self.wipe_time = max(self.wipe_time, 2 * WIPER_SWEEP_SECONDS)
 
         elif kind == "burst":
 
@@ -231,6 +244,23 @@ class CarModel:
         self.bounce += self._bounce_velocity * dt
 
         self.shake_time = max(0.0, self.shake_time - dt)
+
+        # wiper: sweeps while thinking or after a "wipe" request, then
+        # returns to its parked position
+        self.wipe_time = max(0.0, self.wipe_time - dt)
+
+        if self.wipe_time > 0 or self.state == "thinking":
+
+            self._wipe_clock += dt
+
+            target = 0.5 - 0.5 * math.cos(math.tau * self._wipe_clock / WIPER_SWEEP_SECONDS)
+
+            self.wiper = approach(self.wiper, target, 30, dt)
+
+        else:
+
+            self._wipe_clock = 0.0
+            self.wiper = approach(self.wiper, 0.0, 10, dt)
 
         # exhaust smoke while revving or accelerating
         self._smoke_timer -= dt
@@ -573,6 +603,8 @@ def _draw_body(painter, m):
 
     painter.restore()
 
+    _draw_wiper(painter, m)
+
     # window frame
     painter.setPen(QPen(QColor("#0e0e11"), 1.6))
     painter.setBrush(Qt.NoBrush)
@@ -596,6 +628,42 @@ def _draw_body(painter, m):
     painter.drawEllipse(QPointF(50, 121), 4.4, 3.2)
 
     _draw_lights(painter, m)
+
+
+def _draw_wiper(painter, m):
+    """
+    A wiper arm pivoting at the foot of the windscreen. Parked it lies
+    along the bottom of the glass; swept it rises up the screen.
+    """
+
+    pivot = QPointF(286, 73)
+
+    angle = math.radians(181 + 27 * m.wiper)
+
+    painter.save()
+    painter.setClipPath(_WINDOW)
+
+    painter.translate(pivot)
+    painter.rotate(math.degrees(angle) - 180)
+
+    pen = QPen(QColor(215, 222, 234, 255), 2.2)
+    pen.setCapStyle(Qt.RoundCap)
+
+    painter.setPen(pen)
+    painter.drawLine(QPointF(0, 0), QPointF(-50, 0))
+
+    blade = QPen(QColor(8, 8, 10, 255), 3.4)
+    blade.setCapStyle(Qt.RoundCap)
+
+    painter.setPen(blade)
+    painter.drawLine(QPointF(-12, 2.0), QPointF(-50, 2.0))
+
+    painter.restore()
+
+    # the pivot nut stays outside the clip
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor(205, 212, 224))
+    painter.drawEllipse(pivot, 1.8, 1.8)
 
 
 def _draw_lights(painter, m):
