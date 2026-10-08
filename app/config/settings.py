@@ -39,6 +39,7 @@ class Settings:
         self.neural_voice = (os.getenv("NEURAL_VOICE") or "true").lower() not in ("0", "false", "no")
         self.wake_word = os.getenv("WAKE_WORD") or DEFAULT_WAKE_WORD
         self.wake_threshold = float(os.getenv("WAKE_THRESHOLD") or 0.5)
+        self.hide_hotkey = os.getenv("HIDE_HOTKEY") or "alt+s"
         self.model_name = os.getenv("MODEL_NAME") or DEFAULT_MODEL
         self.fallback_models = [
             m.strip()

@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
     QSystemTrayIcon,
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.config.secrets import get_stored_api_key, store_api_key
 from app.ui import theme
-from app.ui.hotkey import HotkeyFilter
+from app.ui.hotkey import HotkeyFilter, parse_hotkey
 from app.ui.main_window import MainWindow, make_icon
 
 log = logging.getLogger("sophia.ui")
@@ -162,24 +163,30 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         wake_factory=wake_factory,
     )
 
-    orb = controller = None
+    car = controller = None
 
     if orb_mode:
 
-        from app.ui.floating_orb import FloatingOrb, OrbController
+        from app.ui.floating_car import CarController, FloatingCar
 
-        orb = FloatingOrb(window.orb_model, settings=window.settings)
-        controller = OrbController(window, orb)
+        car = FloatingCar(settings=window.settings)
+        controller = CarController(window, car)
 
         if window.tray is not None:
+
             window.tray.activated.disconnect()
             window.tray.activated.connect(
-                lambda reason: controller.open_chat()
+                lambda reason: car.toggle_visibility()
                 if reason == QSystemTrayIcon.Trigger
                 else None
             )
 
-    # In orb mode the hotkey starts a voice request, like a click
+            show_hide = QAction("Show / hide the car", window)
+            show_hide.triggered.connect(car.toggle_visibility)
+
+            window._tray_menu.insertAction(window._tray_menu.actions()[0], show_hide)
+
+    # In car mode the first hotkey starts a voice request
     hotkey = HotkeyFilter(controller.hotkey if controller else window.toggle_visibility)
 
     label = hotkey.register()
@@ -192,12 +199,39 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
             window.tray.setToolTip(f"Sophia ({label})")
 
     else:
-        log.info("No free global hotkey; use the tray icon instead")
+        log.info("No free global hotkey; use the car's buttons or the tray icon")
+
+    # Show / hide the car: Alt+S by default
+    hide_hotkey = None
+
+    if car is not None:
+
+        parsed = parse_hotkey(settings.hide_hotkey)
+
+        if parsed is not None:
+
+            hide_hotkey = HotkeyFilter(car.toggle_visibility, candidates=[parsed], hotkey_id=0x50F2)
+
+            if hide_hotkey.register():
+
+                app.installNativeEventFilter(hide_hotkey)
+
+                log.info("%s shows and hides the car", parsed[2])
+
+            else:
+
+                log.info("%s is taken by another program; use the tray icon", parsed[2])
+
+                hide_hotkey = None
+
+        else:
+            log.warning("HIDE_HOTKEY '%s' is not a valid shortcut", settings.hide_hotkey)
 
     if orb_mode:
 
-        # only the orb appears at first; the chat opens on a triple click
-        orb.show()
+        # only the car appears at first, driving in from the screen edge;
+        # the chat opens from its Chat button
+        car.enter()
 
     elif not (minimized and window.tray is not None):
 
@@ -207,6 +241,9 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
     code = app.exec()
 
     hotkey.unregister()
+
+    if hide_hotkey is not None:
+        hide_hotkey.unregister()
 
     lock.unlock()
 

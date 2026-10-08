@@ -12,7 +12,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QAction, QColor, QCursor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from app.computer.autostart import Autostart
 from app.ui import theme
-from app.ui.orb import OrbModel, OrbWidget
+from app.ui.car import CarModel, CarWidget, draw_car
 from app.ui.widgets import ChatView, SuggestionChips, collapse, fade_in
 from app.voice.wakeword import spoken_name
 
@@ -47,8 +47,8 @@ SUGGESTIONS = [
 ]
 
 FRAME_MS = 16
-HERO_ORB = 190
-MINI_ORB = 56
+HERO_CAR = (300, 106)
+MINI_CAR = (150, 54)
 ALERT_SECONDS = 1.6
 HISTORY_BUBBLES = 12
 MAX_INPUT_LINES = 5
@@ -56,20 +56,21 @@ MAX_INPUT_LINES = 5
 
 def make_icon():
     """
-    The app icon, drawn in code so no image file is needed.
+    The app icon: the little yellow car, drawn in code.
     """
 
-    pixmap = QPixmap(64, 64)
+    from PySide6.QtCore import QRectF
+
+    pixmap = QPixmap(96, 96)
     pixmap.fill(Qt.transparent)
 
     painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing)
-    painter.setBrush(QColor(theme.ACCENT))
+    painter.setBrush(QColor(theme.PANEL))
     painter.setPen(Qt.NoPen)
-    painter.drawEllipse(2, 2, 60, 60)
-    painter.setPen(QColor("white"))
-    painter.setFont(QFont("Segoe UI", 30, QFont.Bold))
-    painter.drawText(pixmap.rect(), Qt.AlignCenter, "S")
+    painter.drawEllipse(2, 2, 92, 92)
+
+    draw_car(painter, QRectF(6, 26, 84, 40), CarModel(), with_ground=False)
+
     painter.end()
 
     return QIcon(pixmap)
@@ -265,10 +266,11 @@ class MainWindow(QMainWindow):
         self.confirm_bar = None
         self._quitting = False
 
-        # the living orb (more orb widgets, such as the floating one,
-        # can be added to extra_orbs and are animated too)
-        self.orb_model = OrbModel()
-        self.extra_orbs = []
+        # the car shown in the chat window; the floating car has its own
+        # model and is told what Sophia is doing through these hooks
+        self.orb_model = CarModel()
+        self.activity_listeners = []     # called with (state, level)
+        self.effect_listeners = []       # called with an effect name
         self.hide_on_close = False
         self._alert_until = 0.0
         self._welcome = True
@@ -319,9 +321,7 @@ class MainWindow(QMainWindow):
         head.setContentsMargins(18, 8, 12, 8)
 
         # small orb: appears once the welcome screen has collapsed
-        self.mini_orb = OrbWidget(self.orb_model, MINI_ORB)
-        self.mini_orb.clicked.connect(self._on_orb_clicked)
-        self.mini_orb.double_clicked.connect(self._on_orb_double_clicked)
+        self.mini_orb = CarWidget(self.orb_model, *MINI_CAR)
         self.mini_orb.hide()
 
         title = QLabel("Sophia")
@@ -389,9 +389,7 @@ class MainWindow(QMainWindow):
         hero_layout.setContentsMargins(24, 14, 24, 14)
         hero_layout.setSpacing(6)
 
-        self.hero_orb = OrbWidget(self.orb_model, HERO_ORB)
-        self.hero_orb.clicked.connect(self._on_orb_clicked)
-        self.hero_orb.double_clicked.connect(self._on_orb_double_clicked)
+        self.hero_orb = CarWidget(self.orb_model, *HERO_CAR)
 
         hero_title = QLabel(WELCOME_TITLE)
         hero_title.setObjectName("hero_title")
@@ -559,7 +557,7 @@ class MainWindow(QMainWindow):
 
         self._leave_welcome(animate=False)
 
-        self.orb_model.kick("shake")
+        self._kick("shake")
 
         self.chat.add(
             f"Sophia could not start: {error}\n\nSee data/logs/sophia.log.",
@@ -624,10 +622,10 @@ class MainWindow(QMainWindow):
 
         # a little celebration when Sophia did something for the user
         if result.get("tool_used") and self.confirm_bar is None:
-            self.orb_model.kick("burst")
+            self._kick("burst")
 
         elif self.confirm_bar is not None:
-            self.orb_model.kick("bounce")
+            self._kick("bounce")
 
         # Spoken replies when asked to, and always after a spoken request
         if self.speaker is not None and (
@@ -647,7 +645,7 @@ class MainWindow(QMainWindow):
 
         self.replied.emit(f"Something went wrong: {error}", False, False)
 
-        self.orb_model.kick("shake")
+        self._kick("shake")
 
         self._voice_turn = False
 
@@ -680,25 +678,12 @@ class MainWindow(QMainWindow):
         model.set_state(state)
         model.set_level(level)
 
-        # look toward the mouse pointer
-        orb = next(
-            (w for w in (self.hero_orb, self.mini_orb, *self.extra_orbs) if w.isVisible()),
-            None,
-        )
-
-        if orb is not None:
-
-            center = orb.mapToGlobal(orb.rect().center())
-            cursor = QCursor.pos()
-
-            model.look_at(
-                (cursor.x() - center.x()) / 450,
-                (cursor.y() - center.y()) / 450,
-            )
-
         model.step(dt)
 
-        for widget in (self.hero_orb, self.mini_orb, *self.extra_orbs):
+        for listener in self.activity_listeners:
+            listener(state, level)
+
+        for widget in (self.hero_orb, self.mini_orb):
 
             if widget.isVisible():
                 widget.update()
@@ -724,17 +709,15 @@ class MainWindow(QMainWindow):
 
         return "idle", 0.0
 
-    def _on_orb_clicked(self):
+    def _kick(self, kind):
+        """
+        A short effect on every car (bounce, burst, shake, honk).
+        """
 
-        if self.sophia is not None:
-            self.toggle_listening()
+        self.orb_model.kick(kind)
 
-    def _on_orb_double_clicked(self):
-
-        if self.speaker is not None:
-            self.speaker.stop()
-
-        self.orb_model.kick("bounce")
+        for listener in self.effect_listeners:
+            listener(kind)
 
     def _on_chip(self, text):
 
@@ -797,7 +780,7 @@ class MainWindow(QMainWindow):
         self.replied.emit(f"**{title}**\n\n{text}", False, False)
 
         self._alert_until = getattr(self, "_elapsed", 0.0) + ALERT_SECONDS
-        self.orb_model.kick("bounce")
+        self._kick("bounce")
 
         if self.tray is not None:
             self.tray.showMessage(title, text, QSystemTrayIcon.Information, 10000)

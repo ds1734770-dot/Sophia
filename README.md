@@ -25,16 +25,24 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 
 ## The interface
 
-Sophia starts as just a floating orb, always on top of your other windows:
+Sophia is a yellow sports car that lives on your screen (an original design, no manufacturer badge). Start it from the command line:
 
-- **1 click:** listen. Speak your request; click again to stop early. The answer is spoken and shown in a small bubble beside the orb (questions get Yes / No / Always allow buttons right there).
-- **2 clicks:** move mode. The orb follows your pointer with a dashed ring; click once to drop it. Its position is remembered.
-- **3 clicks:** open the full chat, docked beside the orb.
-- **Right-click:** menu (open chat, talk, spoken replies, hands-free, reset position, quit). The orb never takes keyboard focus, so it will not interrupt what you are typing elsewhere.
+```powershell
+python main.py            # the car
+python main.py --chat     # classic chat window instead
+```
 
-Sophia can launch any program on your PC (she shows the path, whether it is signed, and whether it was downloaded; one "Always allow" covers the session), open any folder, and look at and operate anything visible on your screen. Use `python main.py --chat` for the classic chat window instead of the orb.
+- **It drives in** from the nearest screen edge when Sophia starts, and drives off again when you hide it or quit.
+- **Drag it** anywhere, like any window. The wheels turn and the car faces the way you move it; it parks facing the middle of the screen.
+- **Hover over it** and the headlights come on, the engine revs, and three buttons appear below: **Voice** (listen, then answer aloud), **Chat** (open the full chat beside the car) and **Hide** (drive off).
+- **Alt+S** hides the car or brings it back (change it with `HIDE_HOTKEY`, for example `ctrl+alt+o`). The tray icon does the same.
+- **Answers** appear as a small text card above the car and are spoken. Questions get Yes / No / Always allow buttons on the card.
+- The car shows what Sophia is doing: bright cool headlights that follow your voice while listening, blinking hazard lights while thinking, brake lights glowing while speaking, a headlight flash and sparkles when a task is done, a shudder on an error.
+- **Right-click** the car for a menu (open chat, talk, hide, spoken replies, hands-free, reset position, quit). The car never takes keyboard focus, so it will not interrupt what you are typing elsewhere.
 
-Sophia is a living orb. It breathes when idle, ripples with your voice while listening, orbits while thinking, pulses while speaking, sparkles when it finishes a task, shakes on an error, and its highlight follows your mouse pointer. The welcome screen offers tap-to-send ideas and folds up into the header after your first message; replies are typed out word by word. Click the orb to talk, double-click it to stop Sophia speaking.
+The welcome screen in the chat window shows the car too, with tap-to-send ideas; it folds into the header after your first message and replies are typed out word by word.
+
+Sophia can launch any program on your PC (she shows the path, whether it is signed and whether it was downloaded; one "Always allow" covers the session), open any folder, and look at and operate anything visible on your screen.
 
 ## How it decides what to do
 
@@ -72,13 +80,13 @@ python main.py
 On first start Sophia asks for a Gemini API key (free at https://aistudio.google.com/apikey). For development you can put `GEMINI_API_KEY` in a `.env` file instead (see `.env.example`).
 
 ```powershell
-python main.py              # floating orb (click to talk, 2 clicks to move, 3 clicks for chat)
+python main.py              # the floating car (hover for Voice / Chat / Hide, Alt+S to hide)
 python main.py --chat       # classic chat window
 python main.py --cli        # text-only console
 python main.py --no-voice   # without microphone and speech
 ```
 
-Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program owns it) to show or hide the window. Closing the window keeps Sophia in the system tray.
+Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program owns it) to start a voice request. Closing the chat keeps the car on screen.
 
 ## Voice
 
@@ -126,6 +134,7 @@ Environment variables or `.env`:
 | `NEURAL_VOICE` | `true` | Set to `false` to always use the offline Windows voice |
 | `WAKE_WORD` | `hey_jarvis` | Wake word model |
 | `WAKE_THRESHOLD` | `0.5` | Lower is more sensitive |
+| `HIDE_HOTKEY` | `alt+s` | Global shortcut that hides or shows the car |
 | `SOPHIA_HOME` | `./data` | Where history, profile, notes and logs are kept |
 
 Your data (chat history, profile, notes, schedule, routines, logs) lives in `data/` and is git-ignored.
