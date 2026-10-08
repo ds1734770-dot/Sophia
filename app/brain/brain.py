@@ -13,6 +13,8 @@ from app.file.search import FileSearch
 from app.computer.shell_runner import ShellRunner
 from app.settings.paths import DATA_DIR, LOGS_DIR, PROJECT_ROOT
 from app.tools.notes_store import NoteStore
+from app.tools.undo import UndoStack
+from app.computer.screen_control import ScreenControl
 from app.planner.reminder_service import FiredStore, RoutineStore, TimerStore
 
 
@@ -44,6 +46,14 @@ class Brain:
         self.routines = RoutineStore(DATA_DIR / "routines.json")
         self.fired = FiredStore(DATA_DIR / "fired.json")
 
+        self.undo = UndoStack()
+
+        self.screen = ScreenControl(
+            capture_png=self.system_controls.capture_png,
+            locate=self.chat_engine.client.locate_point,
+            clipboard=self._clipboard(),
+        )
+
         self.registry = build_default_registry(
             computer=self.tool_engine.computer,
             browser=self.tool_engine.browser,
@@ -57,6 +67,8 @@ class Brain:
             audit=AuditLog(LOGS_DIR / "actions.jsonl"),
             notes=NoteStore(DATA_DIR / "notes.json"),
             reminders=(self.timers, self.routines),
+            screen=self.screen,
+            undo=self.undo,
         )
 
 
@@ -156,6 +168,18 @@ class Brain:
             }
 
     # -----------------------------------------------------
+
+    @staticmethod
+    def _clipboard():
+
+        try:
+
+            from app.tools.personal_tools import default_clipboard
+
+            return default_clipboard()
+
+        except Exception:
+            return None
 
     def run_background(self, conversation, system_instruction, context):
         """

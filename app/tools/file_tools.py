@@ -77,7 +77,12 @@ def _read_text(path, limit):
     return True, text
 
 
-def register_file_tools(registry, files, search, guard):
+def register_file_tools(registry, files, search, guard, undo=None):
+
+    def remember(description, action):
+
+        if undo is not None:
+            undo.push(description, action)
 
     # ----------------------------------------------
     # Finding and reading
@@ -217,7 +222,26 @@ def register_file_tools(registry, files, search, guard):
 
             parent = probe.parent
 
-        return files.create_folder(name, parent)
+        created = (parent or (files.home / "Documents")) / name
+        existed = created.exists()
+
+        ok, message = files.create_folder(name, parent)
+
+        if ok and not existed:
+
+            def remove_empty():
+
+                try:
+                    created.rmdir()
+
+                except OSError:
+                    return False, "The folder is not empty or no longer exists."
+
+                return True, ""
+
+            remember(f"create folder {created}", remove_empty)
+
+        return ok, message
 
     def rename_file(context, path, new_name):
 
@@ -235,7 +259,18 @@ def register_file_tools(registry, files, search, guard):
         if (source.parent / new_name).exists():
             return False, f"'{new_name}' already exists there."
 
-        return files.rename(source, new_name)
+        renamed = source.parent / new_name
+
+        ok, message = files.rename(source, new_name)
+
+        if ok:
+
+            remember(
+                f"rename {source.name} to {new_name}",
+                lambda: files.rename(renamed, source.name),
+            )
+
+        return ok, message
 
     def move_file(context, source, destination):
 
@@ -265,7 +300,16 @@ def register_file_tools(registry, files, search, guard):
         if dest.exists():
             return False, f"{dest.name} already exists at the destination."
 
-        return files.move(str(src), str(dest))
+        ok, message = files.move(str(src), str(dest))
+
+        if ok:
+
+            remember(
+                f"move {src.name} to {dest.parent}",
+                lambda: files.move(str(dest), str(src)),
+            )
+
+        return ok, message
 
     def copy_file(context, source, destination):
 
@@ -291,7 +335,16 @@ def register_file_tools(registry, files, search, guard):
         if dest.exists():
             return False, f"{dest.name} already exists at the destination."
 
-        return files.copy(str(src), str(dest))
+        ok, message = files.copy(str(src), str(dest))
+
+        if ok:
+
+            remember(
+                f"copy {src.name} to {dest.parent}",
+                lambda: files.delete(dest),
+            )
+
+        return ok, message
 
     def write_file(context, path, content, overwrite=False):
 
@@ -303,7 +356,9 @@ def register_file_tools(registry, files, search, guard):
         if target.suffix.lower() in EXECUTABLE_EXTENSIONS:
             return False, "I won't create programs or scripts."
 
-        if target.exists() and not overwrite:
+        existed = target.exists()
+
+        if existed and not overwrite:
             return False, (
                 f"{target.name} already exists. Ask the user before "
                 "replacing it, then call again with overwrite=true."
@@ -316,6 +371,9 @@ def register_file_tools(registry, files, search, guard):
 
         except OSError as e:
             return False, f"I couldn't write that file: {e}"
+
+        if not existed:
+            remember(f"create file {target}", lambda: files.delete(target))
 
         return True, f"Saved {target} ({len(content)} characters)."
 
@@ -425,6 +483,24 @@ def register_file_tools(registry, files, search, guard):
         preview=lambda a: f"I'm about to copy {a['source']} to {a['destination']}.",
         handler=copy_file,
     ))
+
+    if undo is not None:
+
+        def undo_last(context):
+
+            return undo.undo()
+
+        registry.register(Tool(
+            name="undo_last_action",
+            description=(
+                "Undo the most recent file change made this session "
+                "(rename, move, copy, new file or folder). Deleted files "
+                "can be restored from the Recycle Bin by the user."
+            ),
+            risk=Risk.CONFIRM,
+            preview=lambda a: f"I'm about to undo: {undo.peek() or 'nothing'}.",
+            handler=undo_last,
+        ))
 
     registry.register(Tool(
         name="delete_file",
