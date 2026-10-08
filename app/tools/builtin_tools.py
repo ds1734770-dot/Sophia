@@ -15,6 +15,7 @@ from app.tools.personal_tools import register_personal_tools
 from app.tools.reminder_tools import register_reminder_tools
 from app.tools.screen_tools import register_screen_tools
 from app.tools.registry import Risk, Tool, ToolBlocked, ToolRegistry
+from app.tools.utility_tools import register_utility_tools
 from app.tools.web_tools import register_web_tools
 
 STRING = {"type": "string"}
@@ -239,6 +240,7 @@ def build_default_registry(
     # ----------------------------------------------
 
     register_web_tools(registry, **(web or {}))
+    register_utility_tools(registry, guard)
 
     # ----------------------------------------------
     # Files

@@ -89,7 +89,9 @@ PARALLEL_SAFE = frozenset({
     "get_current_time", "calculate", "web_search", "read_webpage", "get_weather",
     "find_files", "list_directory", "read_file", "list_memories", "get_schedule",
     "list_notes", "list_todos", "list_timers", "list_routines", "system_status",
-    "list_integrations", "clipboard_read",
+    "list_integrations", "clipboard_read", "convert_units", "convert_currency",
+    "define_word", "wikipedia_summary", "news_headlines", "list_processes",
+    "network_status", "folder_sizes", "recent_files",
 })
 
 
