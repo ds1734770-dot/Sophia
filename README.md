@@ -100,7 +100,7 @@ pytest
 
 ```powershell
 pip install pyinstaller
-.\scriptsuild.ps1
+.scriptsbuild.ps1
 ```
 
 This produces `dist\Sophia\Sophia.exe` (about 400 MB, mostly the Qt and speech libraries). The packaged app keeps its data in `%APPDATA%\Sophia`. An installer (for example Inno Setup) can wrap the folder.
