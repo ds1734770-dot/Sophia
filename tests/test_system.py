@@ -434,3 +434,45 @@ def test_builtin_calculator_closes_the_real_process():
     calc = next(a for a in builtin_applications() if a["name"] == "Calculator")
 
     assert process_name_for(calc) == "CalculatorApp.exe"
+
+
+# ---------------------------------------------------------------
+# Vision
+# ---------------------------------------------------------------
+
+def test_capture_png_downscales_and_stays_in_memory(tmp_path):
+
+    from PIL import Image
+
+    controls, _, _ = make_controls(tmp_path, grab=lambda: Image.new("RGB", (3200, 1800), "white"))
+
+    data = controls.capture_png(max_width=1600)
+
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+
+    import io
+    assert Image.open(io.BytesIO(data)).size == (1600, 900)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_look_at_screen_needs_confirmation_then_asks_vision(registry_env, tmp_path):
+
+    context, _, _, _ = registry_env
+
+    asked = []
+
+    registry = build_default_registry(
+        computer=Stub(), browser=Stub(), files=Stub(), indexer=Stub(), planner=Stub(),
+        vision=lambda question: asked.append(question) or "a terminal showing an error",
+    )
+
+    first = registry.execute("look_at_screen", {"question": "what error?"}, context)
+
+    assert first.needs_confirmation
+    assert "send it to Gemini" in first.message
+    assert asked == []
+
+    second = registry.execute("look_at_screen", {"question": "what error?"}, context, confirmed=True)
+
+    assert second.message == "a terminal showing an error"
+    assert asked == ["what error?"]

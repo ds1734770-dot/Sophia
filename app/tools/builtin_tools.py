@@ -25,7 +25,7 @@ TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def build_default_registry(
-    computer, browser, files, indexer, planner, system=None
+    computer, browser, files, indexer, planner, system=None, vision=None
 ):
     """
     Create the registry with every built-in tool.
@@ -442,6 +442,25 @@ def build_default_registry(
                 "Save your work first."
             ),
             handler=lambda context, action: system.power(action),
+        ))
+
+    if vision is not None:
+
+        registry.register(Tool(
+            name="look_at_screen",
+            description=(
+                "Look at the user's screen and answer a question about "
+                "it, for example 'what error is showing?' or 'summarize "
+                "this page'. Sends a screenshot to Gemini."
+            ),
+            parameters={"question": STRING},
+            required=["question"],
+            risk=Risk.CONFIRM,
+            preview=lambda a: (
+                "I'm about to take a screenshot of your screen and send "
+                f"it to Gemini to answer: \"{a['question']}\""
+            ),
+            handler=lambda context, question: vision(question),
         ))
 
     # ----------------------------------------------

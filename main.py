@@ -1,5 +1,6 @@
 import sys
 
+from app.logging_setup import setup_logging
 from app.sophia import Sophia
 
 
@@ -9,6 +10,8 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+
+    setup_logging()
 
     assistant = Sophia()
     assistant.start()

@@ -1,9 +1,13 @@
+import logging
+import threading
 from datetime import datetime
 
 from app.brain.tool_context import ToolContext
 from app.computer.application_manager import ApplicationManager
 from app.config.settings import Settings
 from app.brain.brain import Brain
+from app.brain.model_pool import UsageTracker
+from app.settings.paths import USAGE_FILE
 
 from app.memory.memory import Memory
 from app.memory.memory_storage import MemoryStorage
@@ -18,20 +22,29 @@ from app.context.context_builder import ContextBuilder
 
 from app.memory.memory_filter import MemoryFilter
 from app.memory.summarizer import Summarizer
-from app.brain.model_pool import UsageTracker
-from app.settings.paths import USAGE_FILE
 
 from app.actions.pending_action_manager import PendingActionManager
-from app.computer.application_indexer import ApplicationIndexer
 
 from app.computer.background_watcher.watcher_manager import WatcherManager
 
+log = logging.getLogger("sophia.core")
+
+
 class Sophia:
+    """
+    The assistant. `respond()` handles one message and is used by every
+    front end (console, desktop window, voice).
+    """
+
+    EXIT_WORDS = {"x", "exit", "quit", "bye"}
 
     def __init__(self):
 
         self.settings = Settings()
         self.brain = Brain()
+
+        # One message at a time, whichever front end sent it
+        self._turn_lock = threading.Lock()
 
         # Conversation Memory
         self.memory = Memory()
@@ -56,15 +69,25 @@ class Sophia:
         self.application_manager.initialize()
         self.watcher_manager = WatcherManager(self.application_manager)
 
+    # -----------------------------------------------------
+
+    def start_services(self):
+        """
+        Start background work (keeps the app index current).
+        """
+
+        self.watcher_manager.start()
 
     def start(self):
 
         print("=" * 50)
-        print(f"🤖 {self.settings.app_name}")
+        print(f"{self.settings.app_name}")
         print(f"Version: {self.settings.version}")
-        self.watcher_manager.start()
+        self.start_services()
         print("=" * 50)
         print("Sophia is online!")
+
+    # -----------------------------------------------------
 
     def process_user_message(self, user_input):
         """
@@ -111,7 +134,7 @@ class Sophia:
 
         except Exception as e:
 
-            print(f"[Memory] {e}")
+            log.warning("Memory extraction failed: %s", e)
 
     def generate_response(self):
         """
@@ -175,9 +198,7 @@ class Sophia:
 
         except Exception as e:
 
-            print(f"[Summary] {e}")
-
-    EXIT_WORDS = {"x", "exit", "quit", "bye"}
+            log.warning("Summary failed: %s", e)
 
     def usage_report(self):
         """
@@ -186,7 +207,48 @@ class Sophia:
 
         return UsageTracker(USAGE_FILE).report()
 
+    # -----------------------------------------------------
+
+    def respond(self, user_input):
+        """
+        Handle one user message.
+
+        Returns {"response": str, "tool_used": bool}.
+        """
+
+        user_input = user_input.strip()
+
+        if user_input.lower() == "usage":
+
+            return {"response": self.usage_report(), "tool_used": True}
+
+        with self._turn_lock:
+
+            self.process_user_message(user_input)
+
+            result = self.generate_response()
+
+            log.info(
+                "turn tool_used=%s chat_success=%s",
+                result["tool_used"],
+                result["chat_success"],
+            )
+
+            self.process_assistant_response(result["response"])
+
+            # Only extract memory if NO tool was used
+            if (not result["tool_used"]) and result["chat_success"]:
+                self.update_profile(user_input)
+
+        return {
+            "response": result["response"],
+            "tool_used": result["tool_used"],
+        }
+
     def chat(self):
+        """
+        Console loop.
+        """
 
         while True:
 
@@ -205,28 +267,6 @@ class Sophia:
 
                 break
 
-            if user_input.lower() == "usage":
+            result = self.respond(user_input)
 
-                print(f"\n{self.settings.app_name}: {self.usage_report()}")
-
-                continue
-
-            # Save user message
-            self.process_user_message(
-                user_input
-            )
-
-            # Generate response
-            result = self.generate_response()
-
-            response = result["response"]
-
-            tool_used = result["tool_used"]
-
-            print(f"\n{self.settings.app_name}: {response}")
-
-            self.process_assistant_response(response)
-
-            # Only extract memory if NO tool was used
-            if (not tool_used) and result["chat_success"]:
-                self.update_profile(user_input)
+            print(f"\n{self.settings.app_name}: {result['response']}")

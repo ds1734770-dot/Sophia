@@ -24,13 +24,16 @@ class Brain:
 
         # Every action goes through this registry, which enforces
         # the safety tiers for both local commands and Gemini.
+        self.system_controls = SystemControls()
+
         self.registry = build_default_registry(
             computer=self.tool_engine.computer,
             browser=self.tool_engine.browser,
             files=self.tool_engine.file_manager,
             indexer=self.tool_engine.indexer,
             planner=ScheduleManager(),
-            system=SystemControls(),
+            system=self.system_controls,
+            vision=self.look_at_screen,
         )
 
 
@@ -114,6 +117,15 @@ class Brain:
             }
 
     # -----------------------------------------------------
+
+    def look_at_screen(self, question):
+        """
+        Screenshot + question to Gemini. The image is never saved.
+        """
+
+        image = self.system_controls.capture_png()
+
+        return self.chat_engine.client.describe_image(question, image)
 
     def summarize(self, previous_summary, messages):
         """

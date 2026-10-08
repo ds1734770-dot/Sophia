@@ -158,6 +158,33 @@ class SystemControls:
     # Screenshot
     # ------------------------------------------------
 
+    def capture_png(self, max_width=1600):
+        """
+        The screen as PNG bytes (downscaled), kept in memory only.
+        """
+
+        import io
+
+        grab = self._grab
+
+        if grab is None:
+            from PIL import ImageGrab
+            grab = ImageGrab.grab
+
+        image = grab()
+
+        if image.width > max_width:
+
+            height = round(image.height * max_width / image.width)
+
+            image = image.resize((max_width, height))
+
+        buffer = io.BytesIO()
+
+        image.save(buffer, format="PNG")
+
+        return buffer.getvalue()
+
     def screenshot(self):
         """
         Save a screenshot to Pictures/Sophia. Returns (success, path or
