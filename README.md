@@ -1,32 +1,47 @@
 # Sophia
 
-A personal AI assistant for Windows. Talk or type to it; it answers questions with Google Gemini and carries out tasks on your computer: open and close apps, search the web, find and manage files, set reminders, control volume, and look at your screen.
+A personal AI assistant that lives on your Windows PC. Talk or type to it; it answers with Google Gemini and works on your computer: it opens apps, searches the web and reads pages, finds and manages files anywhere on the PC, runs PowerShell, controls the screen, sets reminders and routines, and talks back.
 
-> Status: early (v0.1). Windows only for now.
+> Status: v0.2, Windows only for now.
 
 ## What it can do
 
 | Area | Examples |
 | --- | --- |
 | Chat and learning | "Explain binary search", "Help me debug this error" |
-| Apps and windows | "Open VS Code", "Close Spotify", "Minimize Chrome" |
-| Web | "Search YouTube for lofi", "Open github.com" |
-| Files | "Find my resume", "Rename it to CV.pdf", "Delete old-notes.txt" |
-| Schedule | "Remind me to call mom tomorrow at 6pm", "What is on tomorrow?" |
-| System | "Volume to 30", "Take a screenshot", "Restart in 30 seconds" |
-| Screen | "What error is on my screen?" (sends a screenshot to Gemini, only after you confirm) |
+| Web | "Who won the match last night?" (searches the web), "Summarize this article: <link>", "Weather in Vizag" |
+| Apps and windows | "Open VS Code", "Open YouTube", "Close Spotify", "Minimize Chrome" |
+| Files, whole PC | "Find my resume", "Summarize that PDF", "Move it to Documents", "Undo that" |
+| Shell | "How much free space do I have?", "What is using port 3000?" (shows the exact PowerShell command first) |
+| Screen control | "Click the Send button", "Type my email in the search box" (looks at the screen, then clicks and types) |
+| Screen questions | "What error is on my screen?" |
+| Reminders and routines | "Remind me at 6pm", "Timer for 10 minutes", "Every weekday at 8 give me a morning briefing" |
+| Notes and to-dos | "Add a to-do: finish report", "Note that the exam is on Monday" |
+| System | "Volume to 30", "Battery and memory?", "Take a screenshot", "Play lofi on YouTube", "Pause the music" |
+| Clipboard | "Fix the grammar of what I copied" |
 | Memory | "Remember I prefer Python", "What do you know about me?", "Forget my city" |
-| Voice | Click the mic and speak; turn on the speaker to hear replies |
+| Voice | Click the mic, or say "Hey Jarvis" in hands-free mode; natural spoken replies |
+| Integrations | Plugins and MCP servers add email, calendar, GitHub, Spotify and more (see below) |
+
+## How it decides what to do
+
+Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. A few exact commands ("open notepad", "what time is it", "12*(5+8)") are answered locally and instantly without using any AI quota; anything vague goes to Gemini.
 
 ## Safety
 
-Everything Sophia does on your computer goes through one registry with three tiers:
+Every action goes through one registry with three tiers:
 
-- **Runs immediately:** reading and low-risk actions (open an app, search, find files).
-- **Asks first:** closing apps, renaming or opening files, looking at your screen, clearing a day's schedule.
-- **Asks with a warning:** deleting files (they go to the Recycle Bin) and shutdown or restart (30 second countdown you can cancel).
+- **Runs immediately:** reading and low-risk actions (open an app, search the web, find or read files, check status).
+- **Asks first:** closing apps, writing, renaming, moving or copying files, clicking and typing on the screen, looking at your screen, running PowerShell. Answer **Yes**, **No**, or **Always allow** to stop asking for that kind of action until Sophia restarts. PowerShell can never be "always allowed".
+- **Asks with a warning:** deleting files (they go to the Recycle Bin), shutdown or restart (30 second countdown), PowerShell commands that change things, adding integrations.
 
-File actions are limited to Desktop, Documents and Downloads, and Sophia will not open programs or scripts. Text found in files or web pages is treated as data, never as instructions.
+Rules that apply on top:
+
+- Files can be read anywhere except secrets (SSH keys, saved passwords, browser cookies). They can be changed anywhere in your own files, but never in Windows, Program Files, AppData or Sophia's own folder. Programs and scripts are never opened or created.
+- PowerShell commands that download and run code, hide commands, or weaken protection are refused outright.
+- Web pages, files, clipboard text and tool output are treated as data, never as instructions.
+- Every action is written to `data/logs/actions.jsonl`. File changes made this session can be undone.
+- Your API key lives in Windows Credential Manager, not in a file.
 
 ## Install (development)
 
@@ -41,7 +56,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-On first start Sophia asks for a Gemini API key (free at https://aistudio.google.com/apikey) and stores it in Windows Credential Manager. For development you can instead put `GEMINI_API_KEY` in a `.env` file (see `.env.example`).
+On first start Sophia asks for a Gemini API key (free at https://aistudio.google.com/apikey). For development you can put `GEMINI_API_KEY` in a `.env` file instead (see `.env.example`).
 
 ```powershell
 python main.py              # desktop window
@@ -49,15 +64,37 @@ python main.py --cli        # text-only console
 python main.py --no-voice   # without microphone and speech
 ```
 
-Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** if another program owns it) to show or hide the window. Closing the window keeps Sophia in the system tray; use the menu to quit.
+Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program owns it) to show or hide the window. Closing the window keeps Sophia in the system tray.
 
 ## Voice
 
-Speech recognition runs on your PC with [faster-whisper](https://github.com/SYSTRAN/faster-whisper), so audio never leaves your computer and uses no AI quota. The model (about 140 MB for `base.en`) downloads the first time you use the microphone. Spoken replies use the built-in Windows voices.
+- **Speech recognition** runs on your PC with [faster-whisper](https://github.com/SYSTRAN/faster-whisper): audio never leaves the computer and uses no quota. The model (about 140 MB for `base.en`) downloads the first time you use the microphone.
+- **Spoken replies** use Microsoft Edge's neural voices (natural, needs internet) and fall back to the offline Windows voice. Pick a voice with `TTS_VOICE`.
+- **Hands-free:** menu > "Hands-free (wake word)" listens for "Hey Jarvis" with a small local model ([openwakeword](https://github.com/dscripka/openWakeWord)); a spoken request gets a spoken reply. Say it clearly near the microphone; lower `WAKE_THRESHOLD` if it misses you. A custom "Hey Sophia" word needs a trained model.
 
 ## Gemini quota
 
-The free tier limits each model separately. Sophia spreads requests across a chain of models (`MODEL_NAME`, then `FALLBACK_MODELS`), remembers which are cooling down, uses a cheaper model for background work (`LIGHT_MODEL`), and only extracts memories from messages that look like personal facts. Type `usage` to see today's requests per model. Simple commands ("open notepad", "what time is it", "12*(5+8)") are handled locally without any request.
+The free tier limits each model separately. Sophia spreads requests across a chain of models (`MODEL_NAME`, then `FALLBACK_MODELS`), remembers which are cooling down, uses a cheaper model for background work (`LIGHT_MODEL`), and only extracts memories from messages that look like personal facts. Type `usage` to see today's requests per model. Web search, page reading, weather and speech recognition do not use Gemini at all.
+
+## Integrations
+
+**MCP servers** give Sophia new tools without code. Create `data/mcp.json`:
+
+```json
+{
+  "servers": {
+    "files": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/me/Documents"],
+      "env": { "TOKEN": "${MY_TOKEN}" }
+    }
+  }
+}
+```
+
+Their tools appear as `mcp_<server>_<tool>` and ask for confirmation unless the server marks them read-only. Ask Sophia "which integrations are connected?" to check.
+
+**Plugins:** put a Python file in `data/plugins/` that defines `TOOLS = [Tool(...)]` or `register(registry, services)`. Files starting with `_` are ignored; see `plugins/_example_plugin.py`. A plugin runs with full access to your PC, so only install ones you trust.
 
 ## Configuration
 
@@ -71,20 +108,26 @@ Environment variables or `.env`:
 | `LIGHT_MODEL` | `gemini-3.1-flash-lite` | Memory extraction and summaries |
 | `REQUEST_TIMEOUT` | `30` | Seconds before a request is given up |
 | `WHISPER_MODEL` | `base.en` | Local speech model (`tiny.en` is smaller and faster) |
-| `SOPHIA_HOME` | `./data` | Where history, profile and logs are kept |
+| `TTS_VOICE` | `en-IN-NeerjaNeural` | Neural voice for replies |
+| `NEURAL_VOICE` | `true` | Set to `false` to always use the offline Windows voice |
+| `WAKE_WORD` | `hey_jarvis` | Wake word model |
+| `WAKE_THRESHOLD` | `0.5` | Lower is more sensitive |
+| `SOPHIA_HOME` | `./data` | Where history, profile, notes and logs are kept |
 
-Your data (chat history, profile, schedule, file index, logs) lives in `data/` and is git-ignored.
+Your data (chat history, profile, notes, schedule, routines, logs) lives in `data/` and is git-ignored.
 
 ## Project layout
 
 ```
 app/
-  brain/      routing, Gemini client, model pool, local command shortcuts
-  tools/      tool registry (safety tiers) and the built-in tools
-  computer/   app discovery and launching, windows, system controls, autostart
-  file/       file index, file manager, path guard
+  brain/      routing, Gemini client, model pool, local fast path
+  tools/      tool registry (safety tiers) and every tool: files, web, shell, screen,
+              reminders, notes, system, MCP bridge, plugins, undo, action log
+  computer/   app discovery and launching, windows, system controls, screen control, shell
+  file/       path policy, whole-PC search, file manager
+  planner/    schedule, timers, routines and the background reminder service
   memory/     history, profile, summaries
-  voice/      speech-to-text and text-to-speech
+  voice/      speech-to-text, spoken replies, neural voice, wake word
   ui/         PySide6 desktop window
 tests/        pytest suite (runs headless)
 ```
@@ -103,12 +146,13 @@ pip install pyinstaller
 .\scripts\build.ps1
 ```
 
-This produces `dist\Sophia\Sophia.exe` (about 400 MB, mostly the Qt and speech libraries). The packaged app keeps its data in `%APPDATA%\Sophia`. An installer (for example Inno Setup) can wrap the folder.
+This produces `dist\Sophia\Sophia.exe`. The packaged app keeps its data in `%APPDATA%\Sophia`. An installer (for example Inno Setup) can wrap the folder.
 
 ## Roadmap
 
 - Installer and auto-update
 - Server layer (accounts, per-user limits, hosted model access) for a public release
-- Multiple saved conversations and search
-- Wake word
-- macOS and Linux support behind a platform adapter
+- Several saved conversations with search
+- A custom "Hey Sophia" wake word
+- Email and calendar through a Google or Microsoft sign-in
+- macOS and Linux behind a platform adapter

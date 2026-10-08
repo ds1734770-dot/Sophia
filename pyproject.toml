@@ -1,6 +1,6 @@
 [project]
 name = "sophia"
-version = "0.1.0"
+version = "0.2.0"
 description = "A personal AI assistant for Windows: chat, voice, and computer control."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,6 +15,15 @@ dependencies = [
     "Pillow",
     "keyring",
     "Send2Trash",
+    "ddgs",
+    "trafilatura",
+    "requests",
+    "psutil",
+    "pypdf",
+    "pyautogui",
+    "mcp",
+    "edge-tts",
+    "openwakeword",
 ]
 
 [tool.ruff]
