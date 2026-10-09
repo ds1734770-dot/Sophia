@@ -1149,6 +1149,13 @@ class CarController(QObject):
 
         window.wake_activated.connect(self._on_wake)
 
+        # other agents (Claude, ChatGPT, Gemini...): the car takes the
+        # colour of the one that matters and reacts to what they report
+        self._agent_task = None
+
+        if getattr(window, "agent_hub", None) is not None:
+            window.agent_signal.connect(self._on_agent)
+
         window.replied.connect(self._on_reply)
         window.hint.connect(self._on_hint)
 
@@ -1190,9 +1197,98 @@ class CarController(QObject):
 
     def _answer(self, answer):
 
+        # a yes / no on the card may be for an agent's question
+        if self._agent_task is not None:
+
+            task_id, self._agent_task = self._agent_task, None
+
+            self.window.reply_to_agent(task_id, answer)
+
+            return
+
         self.window.send(answer)
 
+    # ------------------------------------------------
+    # Other agents
+    # ------------------------------------------------
+
+    def _paint_for_agents(self):
+        """
+        Dress the car for the agent that matters most right now, and show
+        the others as dots.
+        """
+
+        hub = self.window.agent_hub
+
+        lead = hub.lead()
+
+        others = [
+            t.color for t in hub.with_status("needs_input", "running")
+            if lead is None or t.id != lead.id
+        ]
+
+        waiting = bool(hub.with_status("needs_input"))
+
+        for model in (self.car.model, self.window.orb_model):
+
+            model.set_tint(lead.color if lead else None)
+            model.attention = waiting
+            model.pips = others[:6]
+
+    def _on_agent(self, kind, task, previous):
+
+        self._paint_for_agents()
+
+        status = task.status
+
+        if status == previous and kind != "started":
+            return
+
+        name = f"**{task.label}**"
+        what = task.title or task.project
+
+        if status == "needs_input":
+
+            # this one matters: come out of hiding and get attention
+            if self.car.hidden or not self.car.isVisible():
+                self.car.show_back()
+
+            self.car.on_effect("honk")
+
+            from app.ui.agents_panel import is_yes_no
+
+            yes_no = is_yes_no(task.question)
+
+            self._agent_task = task.id if yes_no else None
+
+            self.car.say(
+                f"{name} needs you: {task.question}"
+                + ("" if yes_no else "\n\n*Click here to reply.*"),
+                confirm=yes_no,
+            )
+
+        elif status == "done":
+
+            self.car.on_effect("burst")
+
+            if self.car.isVisible() and not self.car.hidden:
+                self.car.say(f"✓ {name} finished" + (f": {what}" if what else "."))
+
+        elif status == "failed":
+
+            self.car.on_effect("shake")
+
+            if self.car.isVisible() and not self.car.hidden:
+                self.car.say(f"✕ {name} hit a problem" + (f" with {what}" if what else "."))
+
+        elif kind == "started":
+
+            self.car.on_effect("bounce")
+
     def _on_reply(self, text, confirm, allow_always):
+
+        # Sophia's own question replaces any agent question on the card
+        self._agent_task = None
 
         # with the chat open, the reply is already there
         if self.window.isVisible():

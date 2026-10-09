@@ -93,7 +93,7 @@ PARALLEL_SAFE = frozenset({
     "list_notes", "list_todos", "list_timers", "list_routines", "system_status",
     "list_integrations", "clipboard_read", "convert_units", "convert_currency",
     "define_word", "wikipedia_summary", "news_headlines", "list_processes",
-    "network_status", "folder_sizes", "recent_files",
+    "network_status", "folder_sizes", "recent_files", "agent_status", "connect_agents",
 })
 
 

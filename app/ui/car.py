@@ -105,7 +105,26 @@ class CarModel:
         self.particles = []
         self._smoke_timer = 0.0
 
+        # an agent's colour: the paint fades to it (and back to yellow)
+        self.tint = QColor("#ffcf10")
+        self.tint_mix = 0.0
+        self._tint_goal = None
+
+        # an agent is waiting for the user: hazard lights keep blinking
+        self.attention = False
+
+        # colours of the other agents that are working (small dots)
+        self.pips = []
+
     # ------------------------------------------------
+
+    def set_tint(self, color):
+        """
+        Paint the car in an agent's colour (a hex string or QColor), or
+        back to yellow with None. The change fades in.
+        """
+
+        self._tint_goal = QColor(color) if color else None
 
     def set_state(self, state):
 
@@ -176,6 +195,19 @@ class CarModel:
         dt = max(0.0, min(dt, 0.1))
 
         self.time += dt
+
+        # paint fade
+        if self._tint_goal is not None:
+
+            self.tint = QColor(
+                int(approach(self.tint.red(), self._tint_goal.red(), 5, dt)),
+                int(approach(self.tint.green(), self._tint_goal.green(), 5, dt)),
+                int(approach(self.tint.blue(), self._tint_goal.blue(), 5, dt)),
+            )
+
+        self.tint_mix = approach(
+            self.tint_mix, 1.0 if self._tint_goal is not None else 0.0, 4, dt
+        )
 
         # driving: wheels turn with the ground, the car faces its heading
         velocity = dx / dt if dt > 0 else 0.0
@@ -293,10 +325,11 @@ class CarModel:
     @property
     def hazard(self):
         """
-        Blinking indicator lights while thinking.
+        Blinking indicator lights while thinking, or while an agent is
+        waiting for the user.
         """
 
-        return self.state == "thinking" and math.sin(self.time * 8) > 0
+        return (self.state == "thinking" or self.attention) and math.sin(self.time * 8) > 0
 
     @property
     def vibration(self):
@@ -318,6 +351,36 @@ class CarModel:
 # ---------------------------------------------------------------
 # Drawing
 # ---------------------------------------------------------------
+
+def tc(m, color):
+    """
+    A yellow paint colour, recoloured to the car's current tint: the hue
+    follows the agent while the shading (light and dark parts) stays.
+    """
+
+    mix = getattr(m, "tint_mix", 0.0)
+
+    if mix <= 0.004:
+        return color
+
+    h, s, l, a = color.getHslF()
+    th, ts, tl, _ = m.tint.getHslF()
+
+    # yellow's shading is kept; saturation follows the tint
+    target = QColor.fromHslF(
+        th if th >= 0 else 0.0,
+        min(1.0, max(0.0, ts * (0.55 + 0.6 * s))),
+        min(0.95, max(0.08, l + (tl - 0.55) * 0.35)),
+        a,
+    )
+
+    return QColor(
+        int(color.red() + (target.red() - color.red()) * mix),
+        int(color.green() + (target.green() - color.green()) * mix),
+        int(color.blue() + (target.blue() - color.blue()) * mix),
+        color.alpha(),
+    )
+
 
 def _body_path():
 
@@ -431,6 +494,8 @@ def draw_car(painter, rect, m, with_ground=True):
 
     _draw_particles(painter, m)
 
+    _draw_pips(painter, m)
+
     painter.restore()
 
 
@@ -505,7 +570,7 @@ def _draw_wheels(painter, m):
         painter.setBrush(QColor("#4b4f58"))
         painter.drawEllipse(QPointF(0, 0), 6, 6)
 
-        painter.setBrush(QColor("#ffd23c"))
+        painter.setBrush(tc(m, QColor("#ffd23c")))
         painter.drawEllipse(QPointF(0, 0), 3.2, 3.2)
 
         painter.restore()
@@ -520,10 +585,10 @@ def _draw_body(painter, m):
     # paint: a deep yellow with a lighter shoulder and a darker sill
     paint = QLinearGradient(QPointF(0, 42), QPointF(0, 130))
 
-    paint.setColorAt(0.0, QColor("#ffe86a"))
-    paint.setColorAt(0.35, QColor("#ffcf10"))
-    paint.setColorAt(0.8, QColor("#f0ae00"))
-    paint.setColorAt(1.0, QColor("#c98800"))
+    paint.setColorAt(0.0, tc(m, QColor("#ffe86a")))
+    paint.setColorAt(0.35, tc(m, QColor("#ffcf10")))
+    paint.setColorAt(0.8, tc(m, QColor("#f0ae00")))
+    paint.setColorAt(1.0, tc(m, QColor("#c98800")))
 
     painter.setBrush(QBrush(paint))
     painter.drawPath(body)
@@ -555,7 +620,7 @@ def _draw_body(painter, m):
     base = QLinearGradient(QPointF(0, 110), QPointF(0, 131))
 
     base.setColorAt(0.0, QColor(0, 0, 0, 0))
-    base.setColorAt(1.0, QColor(60, 30, 0, 110))
+    base.setColorAt(1.0, tc(m, QColor(60, 30, 0, 110)))
 
     painter.setBrush(QBrush(base))
     painter.drawRect(QRectF(40, 108, 340, 24))
@@ -563,7 +628,7 @@ def _draw_body(painter, m):
     painter.restore()
 
     # crisp outline
-    painter.setPen(QPen(QColor(150, 98, 0, 170), 1.2))
+    painter.setPen(QPen(tc(m, QColor(150, 98, 0, 170)), 1.2))
     painter.setBrush(Qt.NoBrush)
     painter.drawPath(body)
 
@@ -611,7 +676,7 @@ def _draw_body(painter, m):
     painter.drawPath(_WINDOW)
 
     # door shut line and handle
-    painter.setPen(QPen(QColor(120, 78, 0, 170), 1.3))
+    painter.setPen(QPen(tc(m, QColor(120, 78, 0, 170)), 1.3))
     painter.drawLine(QPointF(198, 78), QPointF(198, 119))
     painter.drawLine(QPointF(126, 80), QPointF(128, 112))
 
@@ -620,7 +685,7 @@ def _draw_body(painter, m):
     painter.drawRoundedRect(QRectF(170, 88, 18, 4.5), 2.2, 2.2)
 
     # side mirror
-    painter.setBrush(QColor("#e9a900"))
+    painter.setBrush(tc(m, QColor("#e9a900")))
     painter.drawRoundedRect(QRectF(262, 67, 14, 8), 4, 4)
 
     # exhaust tip
@@ -675,8 +740,8 @@ def _draw_lights(painter, m):
     # the wing rises into a rounded housing around the lamp
     housing = QRadialGradient(QPointF(lx - 3, ly - 5), 18)
 
-    housing.setColorAt(0.0, QColor("#ffe86a"))
-    housing.setColorAt(1.0, QColor("#f0ae00"))
+    housing.setColorAt(0.0, tc(m, QColor("#ffe86a")))
+    housing.setColorAt(1.0, tc(m, QColor("#f0ae00")))
 
     painter.setBrush(QBrush(housing))
     painter.drawEllipse(QPointF(lx, ly), 14.5, 13)
@@ -731,6 +796,37 @@ def _draw_lights(painter, m):
     # rear indicator
     painter.setBrush(QColor("#ffb020") if m.hazard else QColor("#6e4e14"))
     painter.drawRoundedRect(QRectF(42, 106, 8, 3.5), 1.8, 1.8)
+
+
+def _draw_pips(painter, m):
+    """
+    A small dot over the car for each other agent that is working.
+    """
+
+    pips = getattr(m, "pips", None)
+
+    if not pips:
+        return
+
+    painter.setPen(Qt.NoPen)
+
+    for i, color in enumerate(pips[:6]):
+
+        pulse = 0.5 + 0.5 * math.sin(m.time * 3 + i * 1.3)
+
+        c = QColor(color)
+
+        halo = QColor(c)
+        halo.setAlpha(int(70 * pulse))
+
+        x = 160 + i * 16
+        y = 14
+
+        painter.setBrush(halo)
+        painter.drawEllipse(QPointF(x, y), 10, 10)
+
+        painter.setBrush(c)
+        painter.drawEllipse(QPointF(x, y), 6, 6)
 
 
 def _draw_particles(painter, m):

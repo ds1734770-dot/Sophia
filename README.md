@@ -111,6 +111,35 @@ Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program 
 
 The free tier limits each model separately. Sophia spreads requests across a chain of models (`MODEL_NAME`, then `FALLBACK_MODELS`), remembers which are cooling down, uses a cheaper model for background work (`LIGHT_MODEL`), and only extracts memories from messages that look like personal facts. Type `usage` to see today's requests per model. Web search, page reading, weather and speech recognition do not use Gemini at all.
 
+## Other agents (Claude, ChatGPT, Gemini, Freebuff...)
+
+Sophia can show what your other agents are doing, with instant updates: **working**, **needs you**, **done**, **failed**.
+
+- The car **takes the colour of the agent that matters most** (Claude orange, ChatGPT green, Gemini blue, Freebuff purple; colours only, no logos) and fades back to yellow when nothing is running. Other working agents appear as small dots over the car.
+- **Needs you:** the hazard lights keep blinking, the car honks, comes out of hiding if needed, and shows a card with the question (Yes / No when it can be answered that way). **Done:** headlight flash and sparkles. **Failed:** a shudder.
+- The chat window shows a strip of agent cards with a live timer. Reply to a question right there (or by saying it to Sophia). If the agent is listening, it gets your answer and carries on; otherwise the answer is copied so you can paste it.
+- Ask "what are my agents doing?" at any time.
+
+Connect them (nothing is changed until you ask):
+
+```powershell
+python -m app.agents.setup                    # show how to connect each agent
+python -m app.agents.setup claude --apply     # Claude Code: adds 3 hooks to ~/.claude/settings.json (backup kept)
+python -m app.agents.setup claude --apply --relay 120   # also lets you answer Claude from Sophia
+python -m app.agents.setup claude --remove    # take the hooks out
+```
+
+Any other terminal agent (Freebuff, Gemini CLI, Codex...) runs through the wrapper, or reports by hand:
+
+```powershell
+python appgents
+otify.py --home data wrap --agent freebuff -- freebuff
+python appgents
+otify.py --home data send --agent gemini --status done --title "Report ready"
+```
+
+The chat websites (claude.ai, ChatGPT, Gemini) need a browser extension, which is not built yet. Reports go to a server that listens only on this computer (127.0.0.1, port `AGENT_PORT`, default 47615), needs Sophia's secret token (in `data/agent_hub.json`) and refuses requests from web pages. Set `AGENT_HUB=false` to turn it off.
+
 ## Integrations
 
 **MCP servers** give Sophia new tools without code. Create `data/mcp.json`:

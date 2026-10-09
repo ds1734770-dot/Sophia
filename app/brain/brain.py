@@ -15,6 +15,7 @@ from app.settings.paths import DATA_DIR, LOGS_DIR, PROJECT_ROOT
 from app.tools.notes_store import NoteStore
 from app.tools.undo import UndoStack
 from app.tools.integration_tools import register_integration_tools
+from app.tools.agent_tools import register_agent_tools
 from app.tools.mcp_bridge import McpBridge
 from app.tools.plugins import load_plugins
 from app.computer.screen_control import ScreenControl
@@ -110,6 +111,10 @@ class Brain:
         )
 
         self.mcp = McpBridge(self.registry, DATA_DIR / "mcp.json")
+
+        from app.agents import get_hub
+
+        register_agent_tools(self.registry, get_hub(), DATA_DIR)
 
         register_integration_tools(
             self.registry, self.mcp, DATA_DIR / "mcp.json", self.plugins

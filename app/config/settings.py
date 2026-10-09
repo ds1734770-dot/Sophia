@@ -55,6 +55,9 @@ class Settings:
         # How hard the model thinks before answering: "minimal", "low",
         # "medium", "high", or "" to leave it to the model. Lower is faster.
         self.thinking_level = (os.getenv("THINKING_LEVEL") or "low").strip().lower()
+        # Reports from other agents (Claude Code hooks, notify command)
+        self.agent_hub = (os.getenv("AGENT_HUB") or "true").strip().lower() not in ("0", "false", "no", "off")
+        self.agent_port = int(os.getenv("AGENT_PORT") or 47615)
         self.request_timeout = int(
             os.getenv("REQUEST_TIMEOUT") or DEFAULT_TIMEOUT_SECONDS
         )

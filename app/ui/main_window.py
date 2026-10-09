@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from app.computer.autostart import Autostart
 from app.ui.car import CarModel, CarWidget, draw_car
 from app.ui.activity import describe_step
+from app.ui.agents_panel import AgentsPanel
 from app.ui.widgets import ChatView, StatusPill, SuggestionChips, collapse, fade_in
 from app.voice.wakeword import spoken_name
 
@@ -275,6 +276,9 @@ class MainWindow(QMainWindow):
     # A tool started or finished (from a worker thread): a dict
     tool_event = Signal(object)
 
+    # An agent reported (from the server thread): kind, task, previous status
+    agent_signal = Signal(str, object, object)
+
     # For the floating orb: a reply (text, asks a question, offers
     # "always") and short hints such as "I didn't hear anything"
     replied = Signal(str, bool, bool)
@@ -291,6 +295,7 @@ class MainWindow(QMainWindow):
         autostart=None,
         wake_factory=None,
         beep=None,
+        agent_hub=None,
     ):
 
         super().__init__()
@@ -302,6 +307,7 @@ class MainWindow(QMainWindow):
         self.settings = settings or QSettings("Sophia", "Sophia")
         self.autostart = autostart or Autostart()
         self.wake_factory = wake_factory
+        self.agent_hub = agent_hub
         # no sound by default: the beep would be recorded as speech
         self.beep = beep
         self.wake_listener = None
@@ -338,6 +344,7 @@ class MainWindow(QMainWindow):
         self.wake_heard.connect(self._on_wake)
         self.partial.connect(self._on_partial)
         self.tool_event.connect(self._on_tool_event)
+        self.agent_signal.connect(self._on_agent_signal)
 
         # animation clock for the orb
         self._clock = QElapsedTimer()
@@ -468,7 +475,24 @@ class MainWindow(QMainWindow):
         hero_layout.addSpacing(8)
         hero_layout.addWidget(self.chips)
 
+        # other agents' tasks (Claude, ChatGPT, Gemini...) when connected
+        self.agents_panel = None
+
+        if self.agent_hub is not None:
+
+            self.agents_panel = AgentsPanel(self.agent_hub)
+            self.agents_panel.reply.connect(self.reply_to_agent)
+            self.agents_panel.dismissed.connect(self._dismiss_agent_task)
+
+            self.agent_hub.listeners.append(
+                lambda kind, task, previous: self.agent_signal.emit(kind, task, previous)
+            )
+
         outer.addWidget(header)
+
+        if self.agents_panel is not None:
+            outer.addWidget(self.agents_panel)
+
         outer.addWidget(self.hero)
         outer.addWidget(self.chat, 1)
         outer.addWidget(composer)
@@ -723,6 +747,50 @@ class MainWindow(QMainWindow):
                 self.speaker.say(match.group(1), interrupt=False)
 
                 stream["spoken"] += match.end()
+
+    def _on_agent_signal(self, kind, task, previous):
+
+        if self.agents_panel is not None:
+            self.agents_panel.refresh()
+
+    def _dismiss_agent_task(self, task_id):
+
+        if self.agent_hub is not None:
+
+            self.agent_hub.dismiss(task_id)
+
+            self.agents_panel.refresh()
+
+    def reply_to_agent(self, task_id, text):
+        """
+        The user answers an agent's question. If the agent is waiting for
+        it (a hook is listening) it receives the answer at once; if not,
+        the text is copied so it can be pasted into that agent.
+        """
+
+        hub = self.agent_hub
+
+        if hub is None:
+            return False
+
+        delivered = hub.is_waiting(task_id)
+
+        hub.answer(task_id, text)
+
+        if not delivered:
+
+            QApplication.clipboard().setText(text)
+
+        row = self.agents_panel.rows.get(task_id) if self.agents_panel else None
+
+        if row is not None:
+
+            row.show_note(
+                "Sent to the agent." if delivered
+                else "Copied: paste it into the agent's window (it is not listening for replies yet)."
+            )
+
+        return delivered
 
     def _on_tool_event(self, event):
         """

@@ -143,6 +143,47 @@ QLabel#steps_title {{ color: {TEXT}; font-size: 13px; font-weight: 600; }}
 QLabel#step_text {{ color: #c9cedb; font-size: 13px; }}
 QLabel#step_time {{ color: {MUTED}; font-size: 11px; }}
 
+/* ---------- other agents ---------- */
+
+QFrame#agents {{
+    background: {PANEL};
+    border-bottom: 1px solid {BORDER_SOFT};
+}}
+QFrame#agents QLabel {{ background: transparent; }}
+QFrame#agent_row QLabel {{ background: transparent; }}
+QWidget#agent_ask {{ background: transparent; }}
+
+QFrame#agent_row {{
+    background: {SURFACE};
+    border: 1px solid {BORDER_SOFT};
+    border-radius: 10px;
+}}
+QLabel#agent_name {{ font-weight: 700; font-size: 13px; }}
+QLabel#agent_title {{ color: #c9cedb; font-size: 13px; }}
+QLabel#agent_question {{ color: {TEXT}; font-size: 13px; }}
+
+QLabel#agent_chip {{
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 9px;
+    padding: 1px 8px;
+    color: {MUTED};
+    background: rgba(255, 255, 255, 0.05);
+}}
+QLabel#agent_chip[status="running"] {{ color: {ACCENT}; background: {ACCENT_GLOW}; }}
+QLabel#agent_chip[status="needs_input"] {{ color: white; background: rgba(255, 184, 0, 0.35); }}
+QLabel#agent_chip[status="done"] {{ color: {OK}; background: rgba(61, 220, 151, 0.14); }}
+QLabel#agent_chip[status="failed"] {{ color: {DANGER}; background: rgba(255, 107, 107, 0.14); }}
+
+QPushButton#agent_close {{
+    border: none;
+    border-radius: 11px;
+    padding: 0;
+    color: {MUTED};
+    background: transparent;
+}}
+QPushButton#agent_close:hover {{ color: {TEXT}; background: rgba(255, 255, 255, 0.08); }}
+
 /* ---------- composer ---------- */
 
 QFrame#composer {{

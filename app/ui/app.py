@@ -165,12 +165,32 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
                 threshold=settings.wake_threshold,
             )
 
+    # Other agents (Claude Code hooks, the notify command) report here
+    hub = agent_server = None
+
+    if settings.agent_hub:
+
+        from app.agents import get_hub
+        from app.agents.server import AgentServer
+
+        hub = get_hub()
+
+        try:
+
+            agent_server = AgentServer(hub, DATA_DIR, settings.agent_port)
+            agent_server.start()
+
+        except OSError as e:
+
+            log.warning("Agent hub could not start: %s", e)
+
     window = MainWindow(
         create_sophia,
         speaker=speaker,
         recorder_factory=recorder_factory,
         transcriber=transcriber,
         wake_factory=wake_factory,
+        agent_hub=hub,
     )
 
     car = controller = None
@@ -253,6 +273,9 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         window.show()
 
     code = app.exec()
+
+    if agent_server is not None:
+        agent_server.stop()
 
     hotkey.unregister()
 
