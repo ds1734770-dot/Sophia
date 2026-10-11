@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 
 from app.ui import theme
 from app.ui.car import CANVAS_W, STATES, CarModel, draw_car
+from app.ui.characters import CHARACTERS, make_model, valid
 
 log = logging.getLogger("sophia.ui")
 
@@ -64,7 +65,7 @@ class Layout:
     drawn at the size of the first version; the default is much smaller.
     """
 
-    def __init__(self, width):
+    def __init__(self, width, character="car"):
 
         width = max(MIN_WIDTH, min(MAX_WIDTH, int(width)))
 
@@ -72,6 +73,12 @@ class Layout:
 
         self.width = width
         self.height = round(236 * k)
+
+        if character != "car":
+
+            self._tall(width, k, character)
+
+            return
 
         # where the car is drawn, and the part that counts as "on the car"
         self.car_rect = QRect(0, round(22 * k), width, round(106 * k))
@@ -84,6 +91,36 @@ class Layout:
 
         # canvas pixels per screen pixel (for wheel rotation)
         self.logical_per_pixel = CANVAS_W / width
+
+
+def _tall(self, width, k, character):
+        """
+        A standing figure: the drawing is taller than wide, with the
+        buttons under its feet.
+        """
+
+        from app.ui.characters import CHARACTERS
+
+        canvas_w, canvas_h = CHARACTERS[character]["model"].canvas
+
+        drawn = round(width * canvas_h / canvas_w)
+
+        self.car_rect = QRect(0, round(4 * k), width, drawn)
+        self.car_hit = QRect(
+            round(width * 0.24), self.car_rect.top() + round(drawn * 0.06),
+            round(width * 0.52), round(drawn * 0.9),
+        )
+
+        self.button = max(15, round(42 * k * 0.8))
+        self.gap = max(5, round(16 * k * 0.8))
+        self.button_y = self.car_rect.bottom() + 4
+
+        self.height = self.button_y + self.button + 12
+
+        self.logical_per_pixel = canvas_w / width
+
+
+Layout._tall = _tall
 
 
 FRAME_MS = 16
@@ -407,6 +444,7 @@ class FloatingCar(QWidget):
     chat_requested = Signal()
     hide_requested = Signal()
     quit_requested = Signal()
+    appearance_requested = Signal(str)
 
     def __init__(self, settings=None, cursor=QCursor.pos, sounds=None, width=None):
 
@@ -425,7 +463,9 @@ class FloatingCar(QWidget):
         self.settings = settings or QSettings("Sophia", "Sophia")
         self._cursor = cursor
 
-        self.model = CarModel()
+        self.character = valid(self.settings.value("appearance", "car"))
+
+        self.model = make_model(self.character)
 
         saved_width = self.settings.value("car_width")
 
@@ -435,7 +475,7 @@ class FloatingCar(QWidget):
         except (TypeError, ValueError):
             start_width = DEFAULT_WIDTH
 
-        self.lay = Layout(start_width)
+        self.lay = Layout(start_width, self.character)
 
         self.setFixedSize(self.lay.width, self.lay.height)
 
@@ -796,6 +836,51 @@ class FloatingCar(QWidget):
 
         return QRect(x, lay.button_y, lay.button, lay.button)
 
+    def set_character(self, name):
+        """
+        Change appearance (car, armor...). The figure stays where it
+        stands: its bottom centre does not move.
+        """
+
+        name = valid(name)
+
+        self.settings.setValue("appearance", name)
+
+        if name == self.character:
+            return
+
+        old = self.lay
+        old_model = self.model
+
+        foot = QPoint(self.x() + old.width // 2, self.y() + old.height)
+
+        self.character = name
+        self.model = make_model(name)
+
+        # keep what the figure was doing and wearing
+        self.model.facing = old_model.facing
+        self.model.hover = old_model.hover
+        self.model.state = old_model.state
+        self.model.attention = old_model.attention
+        self.model.pips = list(old_model.pips)
+        self.model.set_tint(
+            old_model._tint_goal.name() if old_model._tint_goal is not None else None
+        )
+
+        self.lay = Layout(old.width, name)
+
+        self.setFixedSize(self.lay.width, self.lay.height)
+
+        self.move(clamp_to_screens(
+            QPoint(foot.x() - self.lay.width // 2, foot.y() - self.lay.height),
+            self.size(),
+        ))
+
+        self.save_position()
+        self._last_x = self.x()
+
+        self.update()
+
     def set_width(self, width):
         """
         Resize the whole car (keeps its centre where it was).
@@ -803,7 +888,7 @@ class FloatingCar(QWidget):
 
         old = self.lay
 
-        self.lay = Layout(width)
+        self.lay = Layout(width, self.character)
 
         self.settings.setValue("car_width", self.lay.width)
 
@@ -913,7 +998,7 @@ class FloatingCar(QWidget):
         painter.setBrush(QColor(0, 0, 0, 3))
         painter.drawRect(self.lay.car_hit)
 
-        draw_car(painter, QRectF(self.lay.car_rect), self.model)
+        self.model.draw(painter, QRectF(self.lay.car_rect))
 
         if self.interact > 0.02:
             self._draw_buttons(painter)
@@ -1066,6 +1151,15 @@ class FloatingCar(QWidget):
         if self.hands_free_action is not None:
             menu.addAction(self.hands_free_action)
 
+        looks = menu.addMenu("Appearance")
+
+        for key, info in CHARACTERS.items():
+
+            action = looks.addAction(info["label"])
+            action.setCheckable(True)
+            action.setChecked(key == self.character)
+            action.triggered.connect(lambda _=False, k=key: self.appearance_requested.emit(k))
+
         sizes = menu.addMenu("Size")
 
         for label, width in SIZES.items():
@@ -1144,6 +1238,13 @@ class CarController(QObject):
         car.chat_requested.connect(self.open_chat)
         car.hide_requested.connect(car.hide_away)
         car.quit_requested.connect(self.quit)
+
+        # the chosen appearance applies to the car window and the chat
+        car.appearance_requested.connect(self.set_appearance)
+        window.appearance_requested.connect(self.set_appearance)
+
+        window._has_car = True
+        window.set_appearance(car.character)
 
         car.card.answered.connect(self._answer)
 
@@ -1234,6 +1335,15 @@ class CarController(QObject):
             model.set_tint(lead.color if lead else None)
             model.attention = waiting
             model.pips = others[:6]
+
+    def set_appearance(self, name):
+
+        self.car.set_character(name)
+
+        self.window.set_appearance(name)
+
+        if getattr(self.window, "agent_hub", None) is not None:
+            self._paint_for_agents()
 
     def _on_agent(self, kind, task, previous):
 

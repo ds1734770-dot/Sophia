@@ -67,6 +67,14 @@ class Particle:
 
 class CarModel:
 
+    # which appearance this model draws, and the shape of its canvas
+    character = "car"
+    canvas = (CANVAS_W, CANVAS_H)
+
+    def draw(self, painter, rect, with_ground=True):
+
+        draw_car(painter, rect, self, with_ground)
+
     def __init__(self, seed=None):
 
         self.rng = random.Random(seed)
@@ -866,7 +874,7 @@ class CarWidget(QWidget):
 
         painter = QPainter(self)
 
-        draw_car(painter, self.rect(), self.model)
+        self.model.draw(painter, self.rect())
 
         painter.end()
 

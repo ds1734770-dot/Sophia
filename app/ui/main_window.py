@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from app.computer.autostart import Autostart
 from app.ui.car import CarModel, CarWidget, draw_car
+from app.ui.characters import CHARACTERS, make_model, valid
 from app.ui.activity import describe_step
 from app.ui.agents_panel import AgentsPanel
 from app.ui.widgets import ChatView, StatusPill, SuggestionChips, collapse, fade_in
@@ -279,6 +280,9 @@ class MainWindow(QMainWindow):
     # An agent reported (from the server thread): kind, task, previous status
     agent_signal = Signal(str, object, object)
 
+    # The user picked an appearance from the menu (car, armor...)
+    appearance_requested = Signal(str)
+
     # For the floating orb: a reply (text, asks a question, offers
     # "always") and short hints such as "I didn't hear anything"
     replied = Signal(str, bool, bool)
@@ -308,6 +312,7 @@ class MainWindow(QMainWindow):
         self.autostart = autostart or Autostart()
         self.wake_factory = wake_factory
         self.agent_hub = agent_hub
+        self._has_car = False
         # no sound by default: the beep would be recorded as speech
         self.beep = beep
         self.wake_listener = None
@@ -323,7 +328,8 @@ class MainWindow(QMainWindow):
 
         # the car shown in the chat window; the floating car has its own
         # model and is told what Sophia is doing through these hooks
-        self.orb_model = CarModel()
+        self.character = valid(self.settings.value("appearance", "car"))
+        self.orb_model = make_model(self.character)
         self.activity_listeners = []     # called with (state, level)
         self.effect_listeners = []       # called with an effect name
         self.hide_on_close = False
@@ -379,7 +385,7 @@ class MainWindow(QMainWindow):
         head.setContentsMargins(18, 8, 12, 8)
 
         # small orb: appears once the welcome screen has collapsed
-        self.mini_orb = CarWidget(self.orb_model, *MINI_CAR)
+        self.mini_orb = CarWidget(self.orb_model, *CHARACTERS[self.character]["mini"])
         self.mini_orb.hide()
 
         title = QLabel("Sophia")
@@ -455,7 +461,7 @@ class MainWindow(QMainWindow):
         hero_layout.setContentsMargins(70, 14, 70, 14)
         hero_layout.setSpacing(6)
 
-        self.hero_orb = CarWidget(self.orb_model, *HERO_CAR)
+        self.hero_orb = CarWidget(self.orb_model, *CHARACTERS[self.character]["hero"])
 
         hero_title = QLabel(WELCOME_TITLE)
         hero_title.setObjectName("hero_title")
@@ -505,6 +511,24 @@ class MainWindow(QMainWindow):
 
         usage = QAction("AI usage today", self)
         usage.triggered.connect(lambda: self.send("usage", show_user=False))
+
+        looks = menu.addMenu("Appearance")
+
+        for key, info in CHARACTERS.items():
+
+            action = looks.addAction(info["label"])
+            action.setCheckable(True)
+            action.setChecked(key == self.character)
+            action.triggered.connect(lambda _=False, k=key: self.appearance_requested.emit(k))
+
+            looks.aboutToShow.connect(
+                lambda a=action, k=key: a.setChecked(k == self.character)
+            )
+
+        # without the car window, the chat's menu switches by itself
+        self.appearance_requested.connect(
+            lambda name: self.set_appearance(name) if not self._has_car else None
+        )
 
         clear = QAction("Clear chat view", self)
         clear.triggered.connect(self.chat.clear)
@@ -747,6 +771,38 @@ class MainWindow(QMainWindow):
                 self.speaker.say(match.group(1), interrupt=False)
 
                 stream["spoken"] += match.end()
+
+    def set_appearance(self, name):
+        """
+        Change how Sophia looks in the header and on the welcome screen.
+        """
+
+        name = valid(name)
+
+        self.settings.setValue("appearance", name)
+
+        if name == self.character and self.orb_model.character == name:
+            return
+
+        old = self.orb_model
+
+        self.character = name
+        self.orb_model = make_model(name)
+
+        self.orb_model.state = old.state
+        self.orb_model.attention = old.attention
+        self.orb_model.pips = list(old.pips)
+        self.orb_model.set_tint(
+            old._tint_goal.name() if old._tint_goal is not None else None
+        )
+
+        sizes = CHARACTERS[name]
+
+        for widget, size in ((self.mini_orb, sizes["mini"]), (self.hero_orb, sizes["hero"])):
+
+            widget.model = self.orb_model
+            widget.setFixedSize(*size)
+            widget.update()
 
     def _on_agent_signal(self, kind, task, previous):
 

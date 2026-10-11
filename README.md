@@ -55,6 +55,15 @@ Sophia can launch any program on your PC (she shows the path, whether it is sign
 - **Controls are read, not guessed.** For "click Send" or "type in the search box" Sophia reads the window's buttons, menus, tabs and text boxes through Windows UI Automation (about half a second, no AI request, usually no mouse movement), and only looks at a screenshot for things that are not real controls (web page content, images). Password boxes are never typed into, and Sophia's own windows are never driven.
 - **She knows your PC up front:** your folders, installed programs and open windows are part of every request, so she does not have to search for them.
 
+## Appearance
+
+Right-click the character (or use the chat window's ⋯ menu) > **Appearance** to choose how Sophia looks. The choice is remembered, applies to the floating character, the chat header and the welcome screen, and keeps the figure standing where it was.
+
+- **Sports car** (the default): drives in, wipers, engine sounds.
+- **Iron Man armor**: a red and gold powered suit drawn in code (an original design inspired by the comic-book hero, not official artwork). It hovers and flies in with thrusters, raises a hand while listening, scans with orbiting lights while thinking, gestures with both hands while speaking, flashes both palms and the chest when something needs you, waves when you hover, and fires a repulsor blast when a task is done. Agent colours tint the red of the suit, with the other working agents as dots over its head.
+
+Every appearance reacts to the same events, so more can be added in `app/ui/characters.py`.
+
 ## How it decides what to do
 
 Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. Exact commands ("open notepad", "what time is it", "12*(5+8)", "volume to 30", "pause", "timer for 10 minutes", "weather", "battery", "convert 5 miles to km", "define word") are answered locally in a fraction of a second without using any AI quota; anything vague goes to Gemini. Gemini replies are faster too: one shared connection, a low thinking level (`THINKING_LEVEL`), and several lookups at once when it asks for them together.
