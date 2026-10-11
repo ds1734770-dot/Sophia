@@ -225,3 +225,146 @@ def test_the_armor_still_reacts_to_what_sophia_does():
     car.on_effect("burst")
 
     assert car.model.flash_time > 0 and any(p.kind == "spark" for p in car.model.particles)
+
+
+# ---------------------------------------------------------------
+# The armor's flights
+# ---------------------------------------------------------------
+
+def armor_car(monkeypatch, sounds=None):
+
+    from app.ui import floating_car
+
+    monkeypatch.setattr(floating_car, "ARMOR_ENTRY_MS", 400)
+    monkeypatch.setattr(floating_car, "ARMOR_SETTLE_MS", 60)
+    monkeypatch.setattr(floating_car, "ARMOR_CHARGE_MS", 60)
+    monkeypatch.setattr(floating_car, "ARMOR_LAUNCH_MS", 300)
+
+    qapp()
+
+    car = FloatingCar(settings=fresh_settings(), cursor=FakeMouse(), sounds=sounds)
+    car.set_character("armor")
+
+    seen = []
+
+    original = car.model.set_phase
+
+    def record(phase):
+        if not seen or seen[-1] != phase:
+            seen.append(phase)
+        original(phase)
+
+    car.model.set_phase = record
+
+    return car, seen
+
+
+def test_the_armor_flies_in_brakes_lands_and_settles(monkeypatch):
+
+    from tests.test_floating_car import FakeSounds
+
+    app = qapp()
+
+    sounds = FakeSounds()
+    car, seen = armor_car(monkeypatch, sounds)
+
+    car.enter()
+
+    assert car.driving and car.model.mode == "arrive"
+
+    assert pump(app, lambda: not car.driving, seconds=5)
+
+    assert seen == ["fly", "brake", "land", "touch"]
+    assert car.model.mode is None and car.model.phase == ""
+    assert car.pos() == car.rest_pos                              # exactly where it should land
+
+    # thrusters on the way in, repulsors for braking, then the landing
+    assert sounds.played == ["jet", "repulsor", "land"]
+
+
+def test_touchdown_makes_a_shockwave_dust_and_a_crouch(monkeypatch):
+
+    app = qapp()
+
+    car, seen = armor_car(monkeypatch)
+
+    car.enter()
+
+    assert pump(app, lambda: car.model.phase == "touch", seconds=5)
+
+    for _ in range(6):
+        car.model.step(0.02)
+
+    assert car.model.shock >= 0
+    assert car.model.crouch > 0.3
+    assert any(p.kind == "dust" for p in car.model.particles)
+
+
+def test_a_quiet_arrival_makes_no_noise(monkeypatch):
+
+    from tests.test_floating_car import FakeSounds
+
+    app = qapp()
+
+    sounds = FakeSounds()
+    car, seen = armor_car(monkeypatch, sounds)
+
+    car.enter(quiet=True)
+
+    assert pump(app, lambda: not car.driving, seconds=5)
+
+    assert sounds.played == [] and seen[-1] == "touch"
+
+
+def test_hiding_the_armor_charges_then_launches_away(monkeypatch):
+
+    from tests.test_floating_car import FakeSounds
+
+    app = qapp()
+
+    sounds = FakeSounds()
+    car, seen = armor_car(monkeypatch, sounds)
+
+    car.show()
+    car.move(400, 400)
+
+    car.hide_away()
+
+    assert car.hidden and car.model.mode == "depart"
+
+    assert pump(app, lambda: not car.isVisible(), seconds=5)
+
+    assert seen == ["charge", "launch"]
+    assert sounds.played == ["repulsor", "launch"]
+    assert car.model.mode is None and not car.driving
+
+
+def test_quitting_launches_the_armor_off_the_right_edge(monkeypatch):
+
+    app = qapp()
+
+    car, seen = armor_car(monkeypatch)
+
+    car.show()
+    car.move(300, 300)
+
+    gone = []
+
+    car.exit_and_quit(lambda: gone.append(True))
+
+    assert pump(app, lambda: bool(gone), seconds=5)
+
+    assert car.x() > 300 and car.y() < 300 and car.model.facing == 1
+
+
+def test_the_car_still_drives_in_the_old_way():
+
+    app = qapp()
+
+    car = FloatingCar(settings=fresh_settings(), cursor=FakeMouse())
+
+    car.enter()
+
+    assert car.model.mode is None if hasattr(car.model, "mode") else True
+    assert pump(app, lambda: not car.driving, seconds=5)
+    assert car.pos() == car.rest_pos

@@ -11,6 +11,7 @@ Answers appear in a small text card above the car and are spoken.
 """
 
 import logging
+import math
 
 from PySide6.QtCore import (
     QPointF,
@@ -130,6 +131,17 @@ ENTRY_MS = 1150
 HIDE_MS = 700
 REV_MS = 500
 EXIT_MS = 850
+
+# the armor: fly in, brake on the palm repulsors, drop, touch down
+ARMOR_ENTRY_MS = 2500
+ARMOR_SETTLE_MS = 650
+ARMOR_CHARGE_MS = 480
+ARMOR_LAUNCH_MS = 1150
+
+
+def lerp_point(a, b, e):
+
+    return QPoint(round(a.x() + (b.x() - a.x()) * e), round(a.y() + (b.y() - a.y()) * e))
 
 CARD_MAX_WIDTH = 340
 CARD_SECONDS_MIN = 4.0
@@ -624,6 +636,175 @@ class FloatingCar(QWidget):
 
         return QPoint(x, target.y()), from_left
 
+    # ------------------------------------------------
+    # The armor's flights
+    # ------------------------------------------------
+
+    def _sequence(self, ms, frame, done):
+        """
+        Run frame(u) for u from 0 to 1 over ms milliseconds, then done().
+        The window counts as "driving" meanwhile, so it cannot be dragged.
+        """
+
+        if self._animation is not None:
+            self._animation.stop()
+
+        animation = QVariantAnimation(self)
+        animation.setStartValue(0.0)
+        animation.setEndValue(1.0)
+        animation.setDuration(ms)
+        animation.setEasingCurve(QEasingCurve.Linear)
+        animation.valueChanged.connect(lambda u: frame(float(u)))
+        animation.finished.connect(done)
+
+        self.driving = True
+
+        animation.start()
+
+        self._animation = animation
+
+    def _armor_enter(self, quiet):
+        """
+        Fly in on full thrust from above the nearest screen edge, brake
+        with the palm repulsors, drop, and touch down.
+        """
+
+        lay = self.lay
+
+        land = QPoint(self.rest_pos)
+
+        area = nearest_rect(land + QPoint(lay.width // 2, lay.height // 2))
+
+        from_left = land.x() + lay.width // 2 < area.center().x()
+
+        d = 1 if from_left else -1
+
+        start = QPoint(
+            area.left() - lay.width - 40 if from_left else area.right() + 40,
+            land.y() - 260,
+        )
+        approach_point = QPoint(land.x() - d * int(lay.width * 0.9), land.y() - 120)
+        hover_point = QPoint(land.x(), land.y() - 28)
+
+        model = self.model
+
+        model.facing = d
+        model.begin("arrive")
+        model.set_phase("fly")
+
+        self.move(start)
+        self._last_x = start.x()
+
+        self.show()
+
+        if not quiet:
+
+            self._play("jet")
+
+            QTimer.singleShot(int(ARMOR_ENTRY_MS * 0.5), lambda: self._play("repulsor"))
+
+        def frame(u):
+
+            if u < 0.5:
+
+                v = u / 0.5
+                point = lerp_point(start, approach_point, 1 - (1 - v) ** 2.2)
+                phase = "fly"
+
+            elif u < 0.8:
+
+                v = (u - 0.5) / 0.3
+                point = lerp_point(approach_point, hover_point, 0.5 - 0.5 * math.cos(math.pi * v))
+                phase = "brake"
+
+            else:
+
+                v = (u - 0.8) / 0.2
+                point = lerp_point(hover_point, land, v * v)
+                phase = "land"
+
+            model.set_phase(phase)
+
+            self.move(point)
+
+        def touched_down():
+
+            self.move(land)
+
+            model.set_phase("touch")
+
+            if not quiet:
+                self._play("land")
+
+            QTimer.singleShot(ARMOR_SETTLE_MS, settled)
+
+        def settled():
+
+            model.end_sequence()
+
+            self.driving = False
+
+            self._face_the_middle()
+
+        self._sequence(ARMOR_ENTRY_MS, frame, touched_down)
+
+    def _armor_depart(self, done, force_right=False, quiet=False):
+        """
+        Crouch and charge the palms, then launch up and away off the
+        nearest screen edge (or the right edge). done() is called once
+        the suit has gone.
+        """
+
+        lay = self.lay
+        model = self.model
+
+        start = QPoint(self.x(), self.y())
+
+        area = nearest_rect(start + QPoint(lay.width // 2, lay.height // 2))
+
+        right = force_right or start.x() + lay.width // 2 > area.center().x()
+
+        end = QPoint(
+            area.right() + 60 if right else area.left() - lay.width - 60,
+            start.y() - 340,
+        )
+
+        model.facing = 1 if right else -1
+        model.begin("depart")
+        model.set_phase("charge")
+
+        self.driving = True
+
+        if not quiet:
+            self._play("repulsor")
+
+        def launch():
+
+            model.set_phase("launch")
+
+            if not quiet:
+                self._play("launch")
+
+            def frame(u):
+
+                # straight up first, then away on a climbing diagonal
+                x = start.x() + (end.x() - start.x()) * u ** 2.6
+                y = start.y() + (end.y() - start.y()) * u ** 1.5
+
+                self.move(QPoint(round(x), round(y)))
+
+            def finished():
+
+                model.end_sequence()
+
+                self.driving = False
+
+                done()
+
+            self._sequence(ARMOR_LAUNCH_MS, frame, finished)
+
+        QTimer.singleShot(ARMOR_CHARGE_MS, launch)
+
     def enter(self, quiet=False):
         """
         Drive in from the nearest screen edge and park. quiet skips the
@@ -631,6 +812,14 @@ class FloatingCar(QWidget):
         """
 
         self.hidden = False
+
+        if self.character == "armor":
+
+            self._quiet_arrival = quiet
+
+            self._armor_enter(quiet)
+
+            return
 
         if not quiet:
             self._play("entry")
@@ -669,9 +858,15 @@ class FloatingCar(QWidget):
 
         self.hidden = True
 
-        self._play("hide")
-
         self.card.dismiss()
+
+        if self.character == "armor":
+
+            self._armor_depart(self.hide)
+
+            return
+
+        self._play("hide")
 
         target, from_left = self._edge_start(QPoint(self.x(), self.y()))
 
@@ -709,6 +904,12 @@ class FloatingCar(QWidget):
 
         if self._animation is not None:
             self._animation.stop()
+
+        if self.character == "armor":
+
+            self._armor_depart(done, force_right=True)
+
+            return
 
         self._play("exit")
 

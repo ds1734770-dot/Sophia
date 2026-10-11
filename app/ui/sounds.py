@@ -169,6 +169,126 @@ def chime(notes, level=0.3):
     return _normalize(np.concatenate(parts), level)
 
 
+def _noise(count, seed):
+
+    return np.random.default_rng(seed).normal(0, 1, count)
+
+
+def _band(x, low, high):
+
+    return _one_pole_lowpass(x, high) - _one_pole_lowpass(x, low)
+
+
+def jet(duration=1.9, level=0.5, seed=3, approach=True):
+    """
+    Thrusters: a roar that swells as the suit flies past, bright while it
+    comes in and duller as it leaves (the pitch falls like a fly-by),
+    with a turbine whine on top.
+    """
+
+    t = _time(duration)
+    u = t / duration
+
+    noise = _noise(len(t), seed)
+
+    rumble = _one_pole_lowpass(noise, 240)
+    body = _band(noise, 300, 1500)
+    hiss = _band(noise, 1800, 6500)
+
+    swell = np.sin(np.pi * np.clip(u, 0, 1) ** 0.85) ** 1.3
+    bright = np.clip(1.25 - 1.15 * u, 0.1, 1.0) if approach else np.clip(0.3 + 0.9 * u, 0.1, 1.0)
+
+    roar = rumble / (np.abs(rumble).max() or 1) * 1.1
+    roar += body / (np.abs(body).max() or 1) * (0.55 + 0.35 * swell)
+    roar += hiss / (np.abs(hiss).max() or 1) * 0.55 * bright
+
+    roar *= 0.25 + 0.75 * swell
+
+    freq = (1500 - 900 * u) if approach else (500 + 1100 * u)
+    phase = 2 * np.pi * np.cumsum(freq) / SAMPLE_RATE
+
+    whine = 0.16 * np.sin(phase) + 0.07 * np.sin(2 * phase)
+
+    return _normalize(_fade(roar + whine * swell, 0.04, 0.25), level)
+
+
+def repulsor(duration=0.95, level=0.4, charge=True):
+    """
+    A palm repulsor: an electric whine that climbs and then holds, with
+    a buzzing tremolo and a hiss of air.
+    """
+
+    t = _time(duration)
+
+    if charge:
+        freq = 240 * np.exp(np.log(1900 / 240) * np.clip(t / (duration * 0.65), 0, 1))
+    else:
+        freq = np.full(len(t), 1700.0)
+
+    phase = 2 * np.pi * np.cumsum(freq) / SAMPLE_RATE
+
+    tone = np.sin(phase) + 0.55 * np.sin(2 * phase + 0.4) + 0.25 * np.sin(3.01 * phase)
+    tone *= 1 + 0.35 * np.sin(2 * np.pi * 34 * t)
+
+    air = _band(_noise(len(t), 7), 1500, 5500)
+    air = air / (np.abs(air).max() or 1) * 0.35
+
+    ramp = np.clip(t / (duration * 0.5), 0, 1) ** 1.5
+
+    return _normalize(_fade((tone * 0.6 + air) * (0.3 + 0.7 * ramp), 0.02, 0.28), level)
+
+
+def land(duration=0.9, level=0.6):
+    """
+    Touchdown: a heavy thud, a metallic clank and a hiss of hydraulics
+    and dust.
+    """
+
+    t = _time(duration)
+
+    thud_freq = 42 + 120 * np.exp(-t * 24)
+    thud = np.sin(2 * np.pi * np.cumsum(thud_freq) / SAMPLE_RATE) * np.exp(-t * 8)
+
+    clank = np.zeros(len(t))
+
+    for freq, amp, decay in ((480, 1.0, 13), (1210, 0.6, 17), (2330, 0.35, 23), (3410, 0.2, 29)):
+        clank += amp * np.sin(2 * np.pi * freq * t) * np.exp(-t * decay)
+
+    dust = _band(_noise(len(t), 11), 200, 3200) * np.exp(-t * 5.5)
+    dust = dust / (np.abs(dust).max() or 1)
+
+    pssh = _band(_noise(len(t), 12), 2500, 7500) * np.exp(-(((t - 0.3) / 0.12) ** 2))
+    pssh = pssh / (np.abs(pssh).max() or 1)
+
+    mix = 1.4 * thud + 0.55 * clank / (np.abs(clank).max() or 1) + 0.45 * dust + 0.35 * pssh
+
+    return _normalize(_fade(mix, 0.002, 0.2), level)
+
+
+def launch(level=0.6):
+    """
+    Taking off: the repulsors charge up, then the thrusters roar away.
+    """
+
+    charge = repulsor(0.55, 0.5)
+    roar = jet(1.05, 0.7, seed=5, approach=False)
+
+    # the roar starts while the whine is still dying away
+    overlap = int(0.1 * SAMPLE_RATE)
+
+    out = np.zeros(len(charge) + len(roar) - overlap)
+
+    out[: len(charge)] += charge
+    out[len(charge) - overlap:] += roar
+
+    # leaving: fades away with distance
+    u = np.linspace(0, 1, len(out))
+
+    out *= np.where(u < 0.5, 1.0, 1 - 0.95 * np.clip((u - 0.5) / 0.5, 0, 1) ** 1.5)
+
+    return _normalize(out, level)
+
+
 def render_all(volume=1.0):
     """
     Every sound as a dict {name: float32 samples}.
@@ -198,6 +318,12 @@ def render_all(volume=1.0):
         "wiper": wiper(0.25 * volume),
         "listen": chime([(660, 0.1), (880, 0.16)], 0.3 * volume),
         "success": chime([(1320, 0.18), (1760, 0.3)], 0.28 * volume),
+
+        # the armor
+        "jet": jet(1.9, 0.6 * volume),
+        "repulsor": repulsor(0.95, 0.45 * volume),
+        "land": land(0.9, 0.7 * volume),
+        "launch": launch(0.7 * volume),
     }
 
     return {name: samples.astype("float32") for name, samples in rendered.items()}

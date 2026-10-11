@@ -60,7 +60,10 @@ Sophia can launch any program on your PC (she shows the path, whether it is sign
 Right-click the character (or use the chat window's ⋯ menu) > **Appearance** to choose how Sophia looks. The choice is remembered, applies to the floating character, the chat header and the welcome screen, and keeps the figure standing where it was.
 
 - **Sports car** (the default): drives in, wipers, engine sounds.
-- **Iron Man armor**: a red and gold powered suit drawn in code (an original design inspired by the comic-book hero, not official artwork). It hovers and flies in with thrusters, raises a hand while listening, scans with orbiting lights while thinking, gestures with both hands while speaking, flashes both palms and the chest when something needs you, waves when you hover, and fires a repulsor blast when a task is done. Agent colours tint the red of the suit, with the other working agents as dots over its head.
+- **Iron Man armor**: a red and gold brushed-metal powered suit drawn in code (an original design inspired by the comic-book hero, not official artwork): faceplate with glowing eye slits, an arc reactor with coil segments, segmented gold abs, gauntlets with palm repulsors, boot thrusters. It hovers, waves when you hover over it, raises a hand to listen, scans with orbiting lights while thinking, gestures while speaking, flashes its palms and reactor when something needs you, and fires a repulsor blast when a task is done. Agent colours tint the red of the suit, with the other working agents as dots over its head.
+  - **Arriving:** it flies in on full thrust (leaning into the flight, thrusters roaring), brakes with both palm repulsors firing rings against the fall, drops, and touches down with a shockwave, dust and a crouch before settling.
+  - **Leaving:** it crouches and charges its palms, then launches straight up and away on a climbing diagonal.
+  - Sounds (generated in code): thruster fly-by, repulsor whine, landing impact with a metal clank and hydraulic hiss, launch. They follow the **Sound effects** switch, and a silent arrival after the wake word plays none.
 
 Every appearance reacts to the same events, so more can be added in `app/ui/characters.py`.
 
