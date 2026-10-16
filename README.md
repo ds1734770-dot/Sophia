@@ -67,6 +67,22 @@ Right-click the character (or use the chat window's ⋯ menu) > **Appearance** t
 
 Every appearance reacts to the same events, so more can be added in `app/ui/characters.py`.
 
+## Working your screen
+
+Sophia can operate whatever is on your screen, the way a person would, in three layers (fastest first):
+
+1. **Instant commands, no AI:** "click Send", "tap the search box", "type hello world", "scroll down", "select all", "copy that", "paste it", "go back", "new tab", "press enter", "refresh the page". She reads the window's controls through Windows accessibility (about a second, web pages included) and acts at once.
+2. **Skills, no AI:** "Open WhatsApp and call Srino", "video call Mom on WhatsApp", "message Raj on WhatsApp saying I'll be late". They open WhatsApp, find the chat, and call or send through the accessibility tree, so they are quick and do not use the Gemini quota. If WhatsApp is not signed in, she says so.
+3. **The screen agent, for anything else:** "search YouTube for lofi and play the first video". Gemini decides each step; after every action it is shown the screen again (numbered controls and what changed) to check its own work. It stops when it is done, when it needs to ask you something, at 25 steps or 3 minutes, or when you stop it.
+
+**Autonomy.** By default she works through a task without asking (`SCREEN_AUTONOMY=auto`); `ask` makes her confirm each click and keystroke. While she works, an amber border and a "Sophia is working" pill show on the screen, ripples mark where she clicks, and every step appears in the chat's live steps card.
+
+**Stopping her.** Press **Ctrl+Alt+X** (`STOP_HOTKEY`), click the red **Stop** chip, or throw the mouse into a screen corner. The next action is refused and the task ends.
+
+**What she never touches, however autonomous she is:** banking and payment pages, password managers and password boxes (and fields called password, code, OTP, card number, PIN), Windows settings and security windows, and her own windows. A forbidden window ends the task. Add your own words with `SCREEN_BLOCKED=metatrader,zerodha`. Text on the screen is treated as data, never as instructions.
+
+**Limits.** She cannot control windows running as administrator, the lock screen or UAC prompts; games and custom-drawn apps expose few controls. The screen agent spends one Gemini request per step, and the free tier allows only about 20 requests per model per day, so use the skills and instant commands for common tasks (or a paid Gemini key for heavy use).
+
 ## How it decides what to do
 
 Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. Exact commands ("open notepad", "what time is it", "12*(5+8)", "volume to 30", "pause", "timer for 10 minutes", "weather", "battery", "convert 5 miles to km", "define word") are answered locally in a fraction of a second without using any AI quota; anything vague goes to Gemini. Gemini replies are faster too: one shared connection, a low thinking level (`THINKING_LEVEL`), and several lookups at once when it asks for them together.
@@ -193,6 +209,10 @@ Environment variables or `.env`:
 | `WAKE_WORD` | `hey_jarvis` | Wake word model |
 | `WAKE_THRESHOLD` | `0.5` | Lower is more sensitive |
 | `HIDE_HOTKEY` | `alt+s` | Global shortcut that hides or shows the car |
+| `STOP_HOTKEY` | `ctrl+alt+x` | Stops a screen task at once |
+| `SCREEN_AUTONOMY` | `auto` | `auto` works through a task without asking; `ask` confirms every click and keystroke |
+| `SCREEN_MAX_STEPS` / `SCREEN_MAX_SECONDS` | `25` / `180` | Limits for one screen task |
+| `SCREEN_BLOCKED` | (empty) | Extra window-title words she must never touch (comma separated) |
 | `CAR_WIDTH` | `130` | Width of the car in pixels (70 to 300) |
 | `SOUND_EFFECTS` | `true` | Turn the car's sound effects on or off |
 | `SOUND_VOLUME` | `0.6` | Sound effect volume (0 to 1) |
