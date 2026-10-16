@@ -281,6 +281,12 @@ class MainWindow(QMainWindow):
     # An agent reported (from the server thread): kind, task, previous status
     agent_signal = Signal(str, object, object)
 
+    # A screen task started or ended (from a worker thread): active, goal
+    screen_task = Signal(bool, str)
+
+    # Sophia clicked or typed somewhere on the screen: x, y
+    screen_click = Signal(int, int)
+
     # The user picked an appearance from the menu (car, armor...)
     appearance_requested = Signal(str)
 
@@ -326,6 +332,8 @@ class MainWindow(QMainWindow):
         self._stream = None
         self._steps = None
         self._queued = None
+        self.overlay = None
+        self.stop_chip = None
         self._opened_at = time.monotonic()
         self._quitting = False
 
@@ -353,6 +361,8 @@ class MainWindow(QMainWindow):
         self.wake_heard.connect(self._on_wake)
         self.partial.connect(self._on_partial)
         self.tool_event.connect(self._on_tool_event)
+        self.screen_task.connect(self._on_screen_task)
+        self.screen_click.connect(self._on_screen_click)
         self.agent_signal.connect(self._on_agent_signal)
 
         # animation clock for the orb
@@ -671,6 +681,19 @@ class MainWindow(QMainWindow):
         if registry is not None and hasattr(registry, "observers"):
             registry.observers.append(self.tool_event.emit)
 
+        # a task on the screen: show the border and Stop, ripple where she clicks
+        brain = getattr(sophia, "brain", None)
+
+        control = getattr(brain, "screen_control", None)
+
+        if control is not None:
+
+            control.listeners.append(
+                lambda active, c=control: self.screen_task.emit(active, c.goal)
+            )
+
+            brain.elements.on_action = lambda x, y: self.screen_click.emit(int(x), int(y))
+
     def _set_screen_confirm(self, on):
 
         self.settings.setValue("screen_confirm", on)
@@ -824,6 +847,47 @@ class MainWindow(QMainWindow):
             widget.model = self.orb_model
             widget.setFixedSize(*size)
             widget.update()
+
+    def _on_screen_task(self, active, goal):
+        """
+        Show (or hide) that Sophia is working the screen, with a Stop button.
+        """
+
+        if self.overlay is None:
+
+            from app.ui.control_overlay import ControlOverlay, StopChip
+
+            self.overlay = ControlOverlay()
+            self.stop_chip = StopChip()
+            self.stop_chip.stop_requested.connect(self.stop_screen_task)
+
+        if active:
+
+            self.overlay.start(goal)
+            self.stop_chip.appear()
+
+        else:
+
+            self.overlay.finish()
+            self.stop_chip.hide()
+
+    def _on_screen_click(self, x, y):
+
+        if self.overlay is not None and self.overlay.isVisible():
+            self.overlay.ripple(x, y)
+
+    def stop_screen_task(self):
+        """
+        The emergency stop: ends a screen task at its next action.
+        """
+
+        control = getattr(getattr(self.sophia, "brain", None), "screen_control", None)
+
+        if control is not None and control.active:
+
+            control.stop("You pressed Stop.")
+
+            self.hint.emit("Stopped.")
 
     def _on_agent_signal(self, kind, task, previous):
 

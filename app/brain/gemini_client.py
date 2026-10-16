@@ -334,7 +334,8 @@ class GeminiClient:
         return self._call(GeminiAdapter.convert(turns), config, light=light)
 
     def generate_with_tools(
-        self, conversation, system_instruction, registry, context, on_text=None
+        self, conversation, system_instruction, registry, context, on_text=None,
+        max_steps=None,
     ):
         """
         Chat request where Gemini may call Sophia's tools.
@@ -362,7 +363,7 @@ class GeminiClient:
 
         used_tool = False
 
-        for _ in range(self.MAX_TOOL_STEPS):
+        for _ in range(max_steps or self.MAX_TOOL_STEPS):
 
             if on_text is not None:
                 response = self._call_stream(contents, config, on_text)
@@ -388,6 +389,10 @@ class GeminiClient:
             for call, result in zip(calls, outcomes):
 
                 if result.needs_confirmation:
+                    return result.message, True
+
+                # a tool can end the whole task (finished, stopped, forbidden)
+                if getattr(result, "stop", False):
                     return result.message, True
 
                 results.append(

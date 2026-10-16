@@ -25,6 +25,15 @@ INTERACTIVE = {
 
 TEXT_FIELDS = {"Edit", "Document", "ComboBox"}
 
+# Programs whose text boxes are web page fields: setting their value through
+# accessibility does not fire the page's own events (a search would not
+# filter), so text must be typed with real keystrokes.
+WEB_PROCESSES = {
+    "chrome.exe", "msedge.exe", "comet.exe", "firefox.exe", "brave.exe", "opera.exe",
+    "vivaldi.exe", "arc.exe", "whatsapp.exe", "whatsapp.root.exe", "teams.exe", "slack.exe",
+    "discord.exe", "claude.exe", "code.exe",
+}
+
 MAX_DEPTH = 16
 MAX_NODES = 1500
 TIME_BUDGET = 3.0
@@ -91,20 +100,112 @@ class UiaBackend:
 
         return window.Name
 
+    def process_name(self, window):
+        """
+        The program file name that owns a window ("chrome.exe"), or "".
+        """
+
+        try:
+
+            import psutil
+
+            return psutil.Process(window.ProcessId).name()
+
+        except Exception:
+            return ""
+
     def walk(self, window):
         """
-        The interactive, visible, non-empty controls of a window.
+        The interactive, visible controls of a window. For a browser or
+        another web-based app (a Document control holds the page) the page
+        is read first and in depth, then the window around it (address
+        bar, a few tabs), so a busy tab strip cannot use up the time.
+        """
+
+        chrome, documents = self._scan(window, skip_documents=True, seconds=1.6, cap=70, depth=14)
+
+        page = []
+
+        def area(doc):
+
+            try:
+                rect = doc.BoundingRectangle
+                return rect.width() * rect.height()
+
+            except Exception:
+                return 0
+
+        for document in sorted(documents, key=area, reverse=True)[:2]:
+
+            found, _ = self._scan(document, skip_documents=False, seconds=2.4, cap=160, depth=40)
+
+            page.extend(found)
+
+        # a long tab strip is not what the user is working in
+        tabs = 0
+        kept = []
+
+        for element in chrome:
+
+            if element.kind == "TabItem":
+
+                tabs += 1
+
+                if tabs > 6:
+                    continue
+
+            kept.append(element)
+
+        elements = page + kept
+
+        for i, element in enumerate(elements, start=1):
+            element.index = i
+
+        return elements
+
+    def _scan(self, root, skip_documents, seconds, cap, depth):
+        """
+        (elements, documents found and not entered) under `root`.
         """
 
         elements = []
+        documents = []
         seen = 0
-        deadline = time.monotonic() + TIME_BUDGET
+        lookups = 0
+        deadline = time.monotonic() + seconds
 
-        def visit(control, depth):
+        def label_from_children(control):
+            """
+            Chat rows, cards and links often have no name of their own:
+            read it from the text inside.
+            """
 
-            nonlocal seen
+            texts = []
 
-            if depth > MAX_DEPTH or seen > MAX_NODES or time.monotonic() > deadline:
+            try:
+
+                for child in control.GetChildren()[:6]:
+
+                    if child.Name and child.Name.strip():
+                        texts.append(child.Name.strip())
+
+                    else:
+
+                        for grandchild in child.GetChildren()[:4]:
+
+                            if grandchild.Name and grandchild.Name.strip():
+                                texts.append(grandchild.Name.strip())
+
+            except Exception:
+                pass
+
+            return " | ".join(texts[:4])
+
+        def visit(control, level):
+
+            nonlocal seen, lookups
+
+            if level > depth or seen > MAX_NODES or len(elements) >= cap or time.monotonic() > deadline:
                 return
 
             try:
@@ -127,10 +228,17 @@ class UiaBackend:
 
                         if rect.width() > 1 and rect.height() > 1:
 
+                            name = (child.Name or "").strip() or (child.HelpText or "").strip()
+
+                            if not name and kind in ("ListItem", "Hyperlink", "Button", "TreeItem", "TabItem") and lookups < 40:
+
+                                lookups += 1
+                                name = label_from_children(child)
+
                             elements.append(Element(
                                 index=len(elements) + 1,
                                 kind=kind,
-                                name=(child.Name or "").strip(),
+                                name=name,
                                 x=rect.xcenter(),
                                 y=rect.ycenter(),
                                 width=rect.width(),
@@ -140,14 +248,20 @@ class UiaBackend:
                                 handle=child,
                             ))
 
+                    if skip_documents and kind == "Document":
+
+                        documents.append(child)
+
+                        continue
+
                 except Exception:
                     continue
 
-                visit(child, depth + 1)
+                visit(child, level + 1)
 
-        visit(window, 0)
+        visit(root, 0)
 
-        return elements
+        return elements, documents
 
     # ---- acting on one control, without the mouse where possible ----
 
@@ -194,6 +308,70 @@ class UiaBackend:
 
         return True
 
+    def focused(self):
+        """
+        (name, is_password) of the control that has keyboard focus, or None.
+        """
+
+        try:
+
+            control = self.auto.GetFocusedControl()
+
+            if control is None:
+                return None
+
+            return (control.Name or "").strip(), bool(control.IsPassword)
+
+        except Exception:
+            return None
+
+    def read_text(self, window, limit=3000):
+        """
+        The text shown in a window (page text, messages, labels), in
+        reading order, up to `limit` characters.
+        """
+
+        parts = []
+        size = 0
+        deadline = time.monotonic() + 2.5
+
+        def visit(control, depth):
+
+            nonlocal size
+
+            if depth > 40 or size >= limit or time.monotonic() > deadline:
+                return
+
+            try:
+                children = control.GetChildren()
+
+            except Exception:
+                return
+
+            for child in children:
+
+                try:
+
+                    kind = child.ControlTypeName.replace("Control", "")
+
+                    if kind == "Text" and not child.IsOffscreen:
+
+                        text = (child.Name or "").strip()
+
+                        if text and (not parts or parts[-1] != text):
+
+                            parts.append(text)
+                            size += len(text) + 1
+
+                except Exception:
+                    continue
+
+                visit(child, depth + 1)
+
+        visit(window, 0)
+
+        return "\n".join(parts)[:limit]
+
     def focus(self, element):
 
         try:
@@ -217,6 +395,10 @@ class ScreenElements:
 
         self._last = []
         self._window = None
+        self._process = ""
+
+        # called with (x, y) where an action happens (for the on-screen ripple)
+        self.on_action = None
 
     @property
     def backend(self):
@@ -236,6 +418,8 @@ class ScreenElements:
             return None, []
 
         title = self.backend.title(window)
+
+        self._process = getattr(self.backend, "process_name", lambda w: "")(window)
 
         # never read or drive Sophia's own windows
         if title.strip().lower() in ("sophia", "program manager"):
@@ -263,6 +447,59 @@ class ScreenElements:
         self._window = title
 
         return title, unique
+
+    def _acted(self, element):
+
+        if self.on_action is not None:
+
+            try:
+                self.on_action(element.x, element.y)
+
+            except Exception:
+                pass
+
+    def snapshot(self, window_title=None):
+        """
+        (title, program, controls) of a window, with the controls numbered
+        1, 2, 3... in the order they are listed. title is None when there
+        is no such window.
+        """
+
+        title, elements = self._scan(window_title)
+
+        return title, self._process, elements
+
+    def current_window(self):
+        """
+        (title, program) of the window the user is working in, quickly
+        (no scan of its controls). (None, "") when there is none.
+        """
+
+        window = self.backend.window(None)
+
+        if window is None:
+            return None, ""
+
+        return (
+            self.backend.title(window),
+            getattr(self.backend, "process_name", lambda w: "")(window),
+        )
+
+    def focused_field(self):
+        """
+        (name, is_password) of the control with keyboard focus, or None.
+        """
+
+        return getattr(self.backend, "focused", lambda: None)()
+
+    def read_text(self, window_title=None, limit=3000):
+
+        window = self.backend.window(window_title)
+
+        if window is None:
+            return ""
+
+        return getattr(self.backend, "read_text", lambda w, n: "")(window, limit)
 
     def list(self, window_title=None):
         """
@@ -385,7 +622,16 @@ class ScreenElements:
         if element is None:
             return False, error
 
+        return self.press_element(element, button, double)
+
+    def press_element(self, element, button="left", double=False):
+        """
+        Click or press one control (from a scan).
+        """
+
         plain = button == "left" and not double
+
+        self._acted(element)
 
         if plain:
 
@@ -426,10 +672,24 @@ class ScreenElements:
         if element.password:
             return False, "That is a password box; please type it yourself."
 
+        return self.type_to(element, text, press_enter)
+
+    def type_to(self, element, text, press_enter=False):
+        """
+        Put text into one control (from a scan).
+        """
+
+        if element.password:
+            return False, "That is a password box; please type it yourself."
+
+        self._acted(element)
+
         done = False
 
+        web = (self._process or "").lower() in WEB_PROCESSES
+
         try:
-            done = self.backend.set_value(element, text) and not press_enter
+            done = (not web) and self.backend.set_value(element, text) and not press_enter
 
         except Exception as e:
             log.debug("Setting the value failed, typing instead: %s", e)
@@ -440,6 +700,11 @@ class ScreenElements:
                 return False, "I can't type right now."
 
             self.mouse.click(element.x, element.y)
+
+            # a search or address box keeps its old text: replace it
+            # (never in a document, where that would erase the user's work)
+            if element.kind in ("Edit", "ComboBox") and hasattr(self.mouse, "hotkey"):
+                self.mouse.hotkey("ctrl", "a")
 
             self.typer(text, press_enter)
 

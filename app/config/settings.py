@@ -39,6 +39,16 @@ class Settings:
         # Which voice speaks: "piper" (offline neural voice, the default),
         # "edge" (Microsoft's online neural voice) or "windows"
         self.tts_engine = (os.getenv("TTS_ENGINE") or "piper").strip().lower()
+        # The screen agent. autonomy: "auto" (works through a task without
+        # asking), "plan" or "ask" (confirm). SCREEN_BLOCKED adds window-title
+        # words she must never touch (comma separated).
+        self.screen_autonomy = (os.getenv("SCREEN_AUTONOMY") or "auto").strip().lower()
+        self.screen_max_steps = int(os.getenv("SCREEN_MAX_STEPS") or 25)
+        self.screen_max_seconds = int(os.getenv("SCREEN_MAX_SECONDS") or 180)
+        self.screen_blocked = [
+            w.strip() for w in (os.getenv("SCREEN_BLOCKED") or "").split(",") if w.strip()
+        ]
+
         # Speech recognition: "moonshine" (fast: about 1 s for a command)
         # or "whisper" (about 2 s on a typical laptop). Whisper is also the
         # fallback if Moonshine cannot load.
@@ -59,6 +69,9 @@ class Settings:
         self.wake_word = os.getenv("WAKE_WORD") or DEFAULT_WAKE_WORD
         self.wake_threshold = float(os.getenv("WAKE_THRESHOLD") or 0.5)
         self.hide_hotkey = os.getenv("HIDE_HOTKEY") or "alt+s"
+
+        # stops a screen task at once, from anywhere
+        self.stop_hotkey = os.getenv("STOP_HOTKEY") or "ctrl+alt+x"
         self.sound_effects = (os.getenv("SOUND_EFFECTS") or "true").lower() not in ("0", "false", "no")
         self.sound_volume = float(os.getenv("SOUND_VOLUME") or 0.6)
         self.car_width = int(os.getenv("CAR_WIDTH") or 0) or None

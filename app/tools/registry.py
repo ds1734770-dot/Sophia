@@ -85,6 +85,10 @@ class ToolResult:
     message: str
     needs_confirmation: bool = False
 
+    # The tool ends the model's loop and `message` is the final answer
+    # (a task finished, the user pressed stop, a forbidden place was reached)
+    stop: bool = False
+
 
 # Tools that only look things up: several can run at the same moment
 PARALLEL_SAFE = frozenset({
@@ -262,7 +266,10 @@ class ToolRegistry:
 
             return result
 
-        if isinstance(outcome, tuple):
+        if isinstance(outcome, ToolResult):
+            result = outcome
+
+        elif isinstance(outcome, tuple):
             ok, message = outcome
             result = ToolResult(bool(ok), str(message))
 

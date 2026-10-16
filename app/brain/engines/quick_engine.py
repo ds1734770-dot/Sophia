@@ -22,6 +22,60 @@ def number(text):
     return float(text)
 
 
+# Keyboard shortcuts spoken as plain words
+SHORTCUTS = {
+    "select all": "ctrl+a", "copy": "ctrl+c", "copy that": "ctrl+c", "copy this": "ctrl+c",
+    "copy it": "ctrl+c", "cut": "ctrl+x", "cut that": "ctrl+x", "paste": "ctrl+v",
+    "paste it": "ctrl+v", "paste that": "ctrl+v", "paste here": "ctrl+v", "undo": "ctrl+z",
+    "undo that": "ctrl+z", "redo": "ctrl+y", "save": "ctrl+s", "save this": "ctrl+s",
+    "save it": "ctrl+s", "new tab": "ctrl+t", "open a new tab": "ctrl+t", "close tab": "ctrl+w",
+    "close this tab": "ctrl+w", "next tab": "ctrl+tab", "previous tab": "ctrl+shift+tab",
+    "refresh": "f5", "reload": "f5", "refresh the page": "f5", "reload the page": "f5",
+    "go back": "alt+left", "go forward": "alt+right", "switch window": "alt+tab",
+    "next window": "alt+tab", "show desktop": "win+d", "find": "ctrl+f",
+    "search this page": "ctrl+f", "zoom in": "ctrl+plus", "zoom out": "ctrl+minus",
+    "full screen": "f11", "go full screen": "f11", "exit full screen": "f11",
+    "close window": "alt+f4", "close this window": "alt+f4", "press enter": "enter",
+    "hit enter": "enter", "press escape": "esc", "press esc": "esc", "press tab": "tab",
+    "press space": "space", "press backspace": "backspace", "press delete": "delete",
+    "press home": "home", "press end": "end",
+}
+
+# "type hello world": the text keeps its capital letters
+TYPE_COMMAND = re.compile(
+    r"^(?:hey |hi |ok |okay )?(?:sophia[ ,]+)?(?:please )?type (?:out )?(.{1,300}?)\.?$",
+    re.IGNORECASE,
+)
+
+
+# "message Srino on WhatsApp saying I'll be late": the text keeps its capitals
+WHATSAPP_MESSAGE = [
+    # send Raj a WhatsApp message: see you at 5
+    re.compile(
+        r"^(?:hey |hi |ok |okay )?(?:sophia[ ,]+)?(?:please )?send (.{2,40}?) a whatsapp(?: message)?"
+        r"(?: saying|:| that says) ?(.{1,500}?)\.?$",
+        re.IGNORECASE,
+    ),
+    # open WhatsApp and message Srino saying I'll be late
+    re.compile(
+        r"^(?:hey |hi |ok |okay )?(?:sophia[ ,]+)?(?:please )?open whatsapp (?:and|then) "
+        r"(?:send|text|message) (?:a message to |to )?(.{2,40}?)(?: saying|: ?| that says| to say) ?(.{1,500}?)\.?$",
+        re.IGNORECASE,
+    ),
+    # message Srino on WhatsApp saying I'll be late
+    re.compile(
+        r"^(?:hey |hi |ok |okay )?(?:sophia[ ,]+)?(?:please )?(?:send|text|message) (?:a message to |to )?(.{2,40}?) "
+        r"(?:on|in|via|through) whatsapp(?: saying|: ?| that says| to say) ?(.{1,500}?)\.?$",
+        re.IGNORECASE,
+    ),
+    # whatsapp Priya saying happy birthday
+    re.compile(
+        r"^(?:hey |hi |ok |okay )?(?:sophia[ ,]+)?(?:please )?whatsapp (.{2,40}?)(?: saying|: ?| that says| to say) ?(.{1,500}?)\.?$",
+        re.IGNORECASE,
+    ),
+]
+
+
 class QuickEngine:
     """
     Exact, unambiguous requests answered at once by running the matching
@@ -75,6 +129,18 @@ class QuickEngine:
              lambda m: ("agent_status", {})),
             (re.compile(r"^(?:connect|set ?up|link) (?:my )?(?:agents?|claude|claude code|chatgpt|gemini|freebuff)(?: to sophia)?$"),
              lambda m: ("connect_agents", {})),
+            (re.compile(r"^open whatsapp (?:and|then) (?:make a |give a |place a )?(video |voice )?call (?:to )?([a-z0-9][a-z0-9 .'\-]{1,38})$"),
+             lambda m: ("whatsapp_call", {"contact": m[2].strip(), "video": (m[1] or "").strip() == "video"})),
+            (re.compile(r"^(?:make a |give a |place a )?(video |voice )?call (?:to )?([a-z0-9][a-z0-9 .'\-]{1,38}?) (?:on|in|using|through|via) whatsapp$"),
+             lambda m: ("whatsapp_call", {"contact": m[2].strip(), "video": (m[1] or "").strip() == "video"})),
+            (re.compile(r"^whatsapp (video |voice )?call (?:to )?([a-z0-9][a-z0-9 .'\-]{1,38})$"),
+             lambda m: ("whatsapp_call", {"contact": m[2].strip(), "video": (m[1] or "").strip() == "video"})),
+            (re.compile(r"^scroll (up|down)(?: a (?:bit|little))?(?: more| again)?$"),
+             lambda m: ("scroll_screen", {"direction": m[1]})),
+            (re.compile(r"^(?:click|tap|press|select|hit)(?: on)?(?: the)? ([a-z0-9][a-z0-9 '\-+&@#]{1,38}?)(?: button| link| tab| icon)?$"),
+             lambda m: ("click_element", {"name": m[1].strip()})),
+            (re.compile(r"^(?:what(?:'s| is) on (?:my |the )?screen|read (?:my |the )?screen|describe (?:my |the )?screen|what am i looking at)$"),
+             lambda m: ("look_at_screen", {"question": "Describe briefly what is on the screen."})),
             (re.compile(r"^(?:show |list )?(?:my )?notes$"),
              lambda m: ("list_notes", {})),
             (re.compile(r"^(?:show |list )?(?:my )?timers$|^how much time is left$"),
@@ -100,10 +166,25 @@ class QuickEngine:
         (tool name, arguments) if the whole sentence is a quick command.
         """
 
+        typed = TYPE_COMMAND.match(command.strip())
+
+        if typed:
+            return ("type_text", {"text": typed[1].strip()})
+
+        for pattern in WHATSAPP_MESSAGE:
+
+            sent = pattern.match(command.strip())
+
+            if sent:
+                return ("whatsapp_message", {"contact": sent[1].strip(), "text": sent[2].strip()})
+
         text = self._text(command)
 
         if not text or len(text) > 80:
             return None
+
+        if text in SHORTCUTS:
+            return ("press_keys", {"keys": SHORTCUTS[text]})
 
         for pattern, build in self.rules:
 
@@ -156,7 +237,9 @@ class QuickEngine:
 
         # a lookup that did not apply (for example "5 apples to pears")
         # is left for Gemini to make sense of
-        if not result.ok and name in ("convert_units", "convert_currency", "define_word"):
+        if not result.ok and name in (
+            "convert_units", "convert_currency", "define_word", "click_element",
+        ):
             return {"handled": False, "response": None}
 
         return {"handled": True, "response": result.message}

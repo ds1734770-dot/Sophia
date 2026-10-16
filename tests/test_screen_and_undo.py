@@ -206,7 +206,7 @@ def test_scrolling():
 # Screen tools in the registry
 # ---------------------------------------------------------------
 
-def make_registry(tmp_path, screen=None, undo=None):
+def make_registry(tmp_path, screen=None, undo=None, autonomy="ask"):
 
     home = tmp_path / "user"
 
@@ -224,6 +224,7 @@ def make_registry(tmp_path, screen=None, undo=None):
         computer=FakeComputer(), browser=FakeBrowser(), files=files,
         search=FileSearch(guard, index_query=lambda t, n: [], home=home),
         planner=FakePlanner(), guard=guard, screen=screen, undo=undo,
+        screen_policy={"autonomy": autonomy},
     )
 
     return context, home
@@ -379,3 +380,15 @@ def test_undo_asks_first_and_says_what_it_will_undo(tmp_path):
     assert asked.needs_confirmation
     assert "rename old.txt to new.txt" in asked.message
     assert (home / "Documents" / "new.txt").exists()
+
+
+
+def test_when_fully_autonomous_clicks_and_typing_run_without_asking(tmp_path):
+
+    screen, backend, _ = make_screen()
+
+    context, _ = make_registry(tmp_path, screen=screen, autonomy="auto")
+
+    assert context.registry.execute("click_on_screen", {"target": "Send"}, context).ok
+    assert context.registry.execute("type_text", {"text": "hi"}, context).ok
+    assert backend.events

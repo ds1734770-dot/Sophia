@@ -91,6 +91,20 @@ STEPS = {
     "lock_computer": ("🔒", "Locking the computer"),
     "power_action": ("⏻", "{action}"),
     "undo_last_action": ("↩", "Undoing the last change"),
+    "do_on_screen": ("🤖", "Working on your screen: {task}"),
+    "screen_look": ("👁", "Looking at the screen"),
+    "screen_read": ("📖", "Reading the screen"),
+    "screen_describe": ("👁", "Looking closely at the screen"),
+    "screen_click": ("🖱", "Clicking control {number}"),
+    "screen_type": ("⌨", "Typing {text}"),
+    "screen_press": ("⌨", "Pressing {keys}"),
+    "screen_scroll": ("↕", "Scrolling {direction}"),
+    "screen_open_app": ("🚀", "Opening {name}"),
+    "screen_switch_window": ("🪟", "Switching to {title}"),
+    "screen_click_visual": ("🖱", "Finding {description}"),
+    "screen_wait": ("⏳", "Waiting"),
+    "screen_finish": ("✅", "Finishing"),
+    "screen_ask_user": ("❓", "Asking you something"),
 }
 
 

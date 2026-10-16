@@ -16,6 +16,13 @@ from app.tools.notes_store import NoteStore
 from app.tools.undo import UndoStack
 from app.tools.integration_tools import register_integration_tools
 from app.tools.agent_tools import register_agent_tools
+from app.agent.control import AgentControl
+from app.agent.guard import ScreenGuard
+from app.agent.observer import ScreenObserver
+from app.agent.screen_agent import ScreenAgent, register_do_on_screen, register_skill_tools
+from app.agent.skills import WhatsAppSkill
+from app.tools.screen_agent_tools import build_screen_agent_registry
+from app.config.settings import Settings
 from app.tools.mcp_bridge import McpBridge
 from app.tools.plugins import load_plugins
 from app.computer.screen_control import ScreenControl
@@ -35,6 +42,9 @@ class _Mouse:
 
     def click(self, x, y, button="left", double=False):
         self.screen.backend.click(x, y, button=button, double=double)
+
+    def hotkey(self, *keys):
+        self.screen.backend.hotkey(*keys)
 
 
 SUMMARY_MAX_MESSAGES = 60
@@ -66,8 +76,17 @@ class Brain:
 
         self.undo = UndoStack()
 
-        # Does looking at the screen need a yes first? (menu setting)
-        self.screen_policy = {"confirm": False}
+        settings = Settings()
+
+        # Does looking at the screen need a yes first? (menu setting) And how
+        # much may she do on the screen without asking? ("auto": a whole task)
+        self.screen_policy = {"confirm": False, "autonomy": settings.screen_autonomy}
+
+        # the places she never touches, and the leash for a screen task
+        self.screen_guard = ScreenGuard(settings.screen_blocked)
+        self.screen_control = AgentControl(
+            settings.screen_max_steps, settings.screen_max_seconds
+        )
 
         self.screen = ScreenControl(
             capture_png=self.system_controls.capture_png,
@@ -97,6 +116,7 @@ class Brain:
             reminders=(self.timers, self.routines),
             screen=self.screen,
             elements=self.elements,
+            screen_guard=self.screen_guard,
             undo=self.undo,
             screen_policy=self.screen_policy,
         )
@@ -115,6 +135,40 @@ class Brain:
         from app.agents import get_hub
 
         register_agent_tools(self.registry, get_hub(), DATA_DIR)
+
+        # The screen agent: a whole task on screen ("open WhatsApp and call X")
+        self.screen_observer = ScreenObserver(self.elements)
+
+        computer = self.tool_engine.computer
+
+        agent_registry = build_screen_agent_registry(
+            self.screen_observer,
+            self.elements,
+            self.screen,
+            self.screen_guard,
+            self.screen_control,
+            open_app=lambda name: computer.open_app(name),
+            focus_window=lambda title: computer.window_manager.window_action(title, "focus"),
+            describe_screen=self.look_at_screen,
+        )
+
+        # its steps show up in the chat's live steps card and the action log
+        agent_registry.observers = self.registry.observers
+        agent_registry.audit = self.registry.audit
+
+        self.screen_agent = ScreenAgent(
+            self.chat_engine.client, self.screen_observer, agent_registry, self.screen_control
+        )
+
+        register_do_on_screen(self.registry, self.screen_agent, self.screen_policy)
+
+        # common tasks done directly, with no AI request (and so no quota)
+        self.whatsapp = WhatsAppSkill(
+            self.screen_observer, self.elements, self.screen_control, self.screen_guard,
+            open_app=lambda name: computer.open_app(name),
+        )
+
+        register_skill_tools(self.registry, self.whatsapp, self.screen_policy)
 
         register_integration_tools(
             self.registry, self.mcp, DATA_DIR / "mcp.json", self.plugins

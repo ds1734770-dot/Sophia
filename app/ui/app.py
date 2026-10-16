@@ -332,6 +332,27 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         else:
             log.warning("HIDE_HOTKEY '%s' is not a valid shortcut", settings.hide_hotkey)
 
+    # Stop a screen task at once, from anywhere: Ctrl+Alt+X by default
+    stop_hotkey = None
+
+    parsed_stop = parse_hotkey(settings.stop_hotkey)
+
+    if parsed_stop is not None:
+
+        stop_hotkey = HotkeyFilter(window.stop_screen_task, candidates=[parsed_stop], hotkey_id=0x50F3)
+
+        if stop_hotkey.register():
+
+            app.installNativeEventFilter(stop_hotkey)
+
+            log.info("%s stops a screen task", parsed_stop[2])
+
+        else:
+
+            log.info("%s is taken by another program; use the Stop button", parsed_stop[2])
+
+            stop_hotkey = None
+
     if orb_mode:
 
         # only the car appears at first, driving in from the screen edge;
@@ -352,6 +373,9 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
 
     if hide_hotkey is not None:
         hide_hotkey.unregister()
+
+    if stop_hotkey is not None:
+        stop_hotkey.unregister()
 
     lock.unlock()
 

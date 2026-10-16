@@ -12,10 +12,81 @@ BOOLEAN = {"type": "boolean"}
 STRING = {"type": "string"}
 
 
-def register_screen_tools(registry, screen, elements=None, screen_policy=None):
+def autonomy_risk(screen_policy):
+    """
+    The tier of an action on the screen: none when she is fully autonomous
+    (the default), a confirmation when the user chose to be asked.
+    """
+
+    policy = screen_policy if screen_policy is not None else {}
+
+    return lambda args: Risk.SAFE if policy.get("autonomy", "auto") == "auto" else Risk.CONFIRM
+
+
+GUARDED = ("click_on_screen", "type_text", "press_keys", "click_element", "type_in_element")
+
+
+def apply_guard(registry, elements, guard, screen_policy):
+    """
+    Every click and keystroke is checked against the places she never
+    touches, and follows the autonomy setting.
+    """
+
+    risk = autonomy_risk(screen_policy)
+
+    for name in GUARDED:
+
+        tool = registry.tools.get(name)
+
+        if tool is None:
+            continue
+
+        tool.risk_fn = risk
+
+        if guard is None or elements is None:
+            continue
+
+        inner = tool.handler
+
+        def guarded(context, _inner=inner, _name=name, **args):
+
+            title, process = elements.current_window()
+
+            allowed, why = guard.check_window(title, process)
+
+            if not allowed:
+                return False, f"I won't do that here: {why}"
+
+            # typing: never into a secret
+            if _name in ("type_in_element", "type_text"):
+
+                if _name == "type_in_element":
+                    field = (args.get("name") or "", False)
+
+                else:
+                    field = elements.focused_field() or ("", False)
+
+                allowed, why = guard.check_field(*field)
+
+                if not allowed:
+                    return False, why
+
+            return _inner(context, **args)
+
+        tool.handler = guarded
+
+
+def register_screen_tools(registry, screen, elements=None, screen_policy=None, guard=None):
 
     if elements is not None:
         register_element_tools(registry, elements, screen_policy)
+
+    _register_screen_tools(registry, screen)
+
+    apply_guard(registry, elements, guard, screen_policy)
+
+
+def _register_screen_tools(registry, screen):
 
     registry.register(Tool(
         name="click_on_screen",
