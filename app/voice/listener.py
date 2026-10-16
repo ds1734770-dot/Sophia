@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import threading
+import time
 
 import numpy as np
 
@@ -43,6 +44,19 @@ NAME_FIXES = [
     (re.compile(r"\bjarvis\b", re.IGNORECASE), "Jarvis"),
 ]
 
+# Recognizers split or misspell the names of programs: put them back
+COMMAND_FIXES = [
+    (re.compile(r"\bgit ?hub\b", re.IGNORECASE), "GitHub"),
+    (re.compile(r"\b(?:you|your|u) ?tube\b", re.IGNORECASE), "YouTube"),
+    (re.compile(r"\bnote ?pad\b", re.IGNORECASE), "Notepad"),
+    (re.compile(r"\bwhats ?app\b", re.IGNORECASE), "WhatsApp"),
+    (re.compile(r"\bpower ?point\b", re.IGNORECASE), "PowerPoint"),
+    (re.compile(r"\bchat ?gpt\b", re.IGNORECASE), "ChatGPT"),
+    (re.compile(r"\bv\.? ?s\.? code\b", re.IGNORECASE), "VS Code"),
+    (re.compile(r"\bspotify\b", re.IGNORECASE), "Spotify"),
+    (re.compile(r"\bgemini\b", re.IGNORECASE), "Gemini"),
+]
+
 # "Hey Jarvis, open notepad" -> "open notepad"
 WAKE_PREFIX = re.compile(r"^\s*(?:hey|hi|okay|ok)?[ ,]*(?:jarvis|sophia)\b[ ,.:!?-]*", re.IGNORECASE)
 
@@ -64,7 +78,7 @@ class Recorder:
 
     def __init__(
         self,
-        silence_seconds=1.1,
+        silence_seconds=0.9,
         max_seconds=30,
         threshold=0.002,
         stream_factory=None,
@@ -246,7 +260,7 @@ def clean_text(text):
 
     text = text.strip()
 
-    for pattern, replacement in NAME_FIXES:
+    for pattern, replacement in NAME_FIXES + COMMAND_FIXES:
         text = pattern.sub(replacement, text)
 
     text = WAKE_PREFIX.sub("", text).strip()
@@ -362,6 +376,8 @@ class Transcriber:
         if audio is None or len(audio) < SAMPLE_RATE * 0.3:
             return ""
 
+        started = time.monotonic()
+
         audio = prepare_audio(audio)
 
         if audio is None:
@@ -390,4 +406,11 @@ class Transcriber:
 
             kept.append(segment.text.strip())
 
-        return clean_text(" ".join(kept))
+        text = clean_text(" ".join(kept))
+
+        log.info(
+            "Heard %r (%.1f s of speech, recognized in %.2f s, Whisper %s)",
+            text, len(audio) / SAMPLE_RATE, time.monotonic() - started, self.model_name,
+        )
+
+        return text

@@ -245,8 +245,8 @@ def test_transcriber_loads_once_and_joins_segments():
     transcriber = Transcriber("tiny.en", model_factory=factory)
     audio = tone(1)
 
-    assert transcriber.transcribe(audio) == "open notepad"
-    assert transcriber.transcribe(audio) == "open notepad"
+    assert transcriber.transcribe(audio) == "open Notepad"
+    assert transcriber.transcribe(audio) == "open Notepad"
     assert loads == ["tiny.en"]
 
 

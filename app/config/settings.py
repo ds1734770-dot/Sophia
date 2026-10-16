@@ -39,6 +39,12 @@ class Settings:
         # Which voice speaks: "piper" (offline neural voice, the default),
         # "edge" (Microsoft's online neural voice) or "windows"
         self.tts_engine = (os.getenv("TTS_ENGINE") or "piper").strip().lower()
+        # Speech recognition: "moonshine" (fast: about 1 s for a command)
+        # or "whisper" (about 2 s on a typical laptop). Whisper is also the
+        # fallback if Moonshine cannot load.
+        self.stt_engine = (os.getenv("STT_ENGINE") or "moonshine").strip().lower()
+        self.moonshine_model = os.getenv("MOONSHINE_MODEL") or "base"
+
         # The small, quick model that double-checks a weak wake word match
         self.wake_check_model = os.getenv("WAKE_CHECK_MODEL") or "tiny.en"
         self.piper_voice = os.getenv("PIPER_VOICE") or "en_GB-jenny_dioco-medium"

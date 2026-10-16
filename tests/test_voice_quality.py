@@ -84,8 +84,8 @@ def test_boost_is_limited_and_silence_is_rejected():
 @pytest.mark.parametrize(
     "heard, expected",
     [
-        ("Hey Jarvis, open notepad", "open notepad"),
-        ("hey jarvis open notepad", "open notepad"),
+        ("Hey Jarvis, open notepad", "open Notepad"),
+        ("hey jarvis open notepad", "open Notepad"),
         ("Jarvis. What's the weather", "What's the weather"),
         ("ask Sofia to open chrome", "ask Sophia to open chrome"),
         ("Sophie, remind me at six", "remind me at six"),
@@ -128,7 +128,7 @@ def test_whisper_gets_levelled_audio_a_wide_search_and_the_vocabulary_hint():
 
     transcriber = Transcriber(model_factory=lambda name: model)
 
-    assert transcriber.transcribe(tone(1, 0.05)) == "open notepad"
+    assert transcriber.transcribe(tone(1, 0.05)) == "open Notepad"
 
     assert model.kwargs["beam_size"] == 5
     assert model.kwargs["language"] == "en"
@@ -144,7 +144,7 @@ def test_segments_that_are_probably_noise_are_dropped():
         Segment("thanks for watching", no_speech=0.9, logprob=-1.5),
     ])
 
-    assert Transcriber(model_factory=lambda n: model).transcribe(tone(1)) == "open notepad"
+    assert Transcriber(model_factory=lambda n: model).transcribe(tone(1)) == "open Notepad"
 
 
 def test_silence_never_reaches_the_model():

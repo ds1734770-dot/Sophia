@@ -189,10 +189,26 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
             speaker = Speaker()
 
         recorder_factory = Recorder
-        transcriber = Transcriber(settings.whisper_model)
 
-        # a small, quick model double-checks a weak wake word match
-        checker = Transcriber(settings.wake_check_model)
+        whisper = Transcriber(settings.whisper_model)
+        whisper_check = Transcriber(settings.wake_check_model)
+
+        if settings.stt_engine == "whisper":
+
+            transcriber, checker = whisper, whisper_check
+
+        else:
+
+            from app.voice.moonshine import FallbackTranscriber, MoonshineTranscriber
+
+            # Moonshine: about twice as fast as Whisper for a command (and
+            # the tiny one about six times), with Whisper as the fallback
+            transcriber = FallbackTranscriber(
+                MoonshineTranscriber(settings.moonshine_model), whisper
+            )
+
+            # a small, quick model double-checks a weak wake word match
+            checker = FallbackTranscriber(MoonshineTranscriber("tiny"), whisper_check)
 
         spoken = settings.wake_word.split("_")[-1]
 
