@@ -39,6 +39,8 @@ class Settings:
         # Which voice speaks: "piper" (offline neural voice, the default),
         # "edge" (Microsoft's online neural voice) or "windows"
         self.tts_engine = (os.getenv("TTS_ENGINE") or "piper").strip().lower()
+        # The small, quick model that double-checks a weak wake word match
+        self.wake_check_model = os.getenv("WAKE_CHECK_MODEL") or "tiny.en"
         self.piper_voice = os.getenv("PIPER_VOICE") or "en_GB-jenny_dioco-medium"
 
         try:

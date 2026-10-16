@@ -577,3 +577,74 @@ def test_a_working_voice_resets_the_wait():
     backend.start("d")
 
     assert fallback.spoken == ["a", "c", "d"]
+
+
+# ---------------------------------------------------------------
+# Start-up order: wake word first, the rest one after another
+# ---------------------------------------------------------------
+
+def test_warm_up_runs_the_loaders_in_order_after_go():
+
+    from app.voice.warmup import WarmUp
+
+    order = []
+
+    warm = WarmUp([lambda: order.append("speech"), lambda: order.append("check"), lambda: order.append("voice")])
+
+    time.sleep(0.1)
+
+    assert order == []                      # nothing starts by itself
+
+    warm.go()
+    warm.go()                               # idempotent
+
+    assert warm.done.wait(2) and order == ["speech", "check", "voice"]
+
+
+def test_warm_up_starts_on_its_own_if_the_wake_word_never_reports():
+
+    from app.voice.warmup import WarmUp
+
+    ran = []
+
+    warm = WarmUp([lambda: ran.append(1)], fallback_seconds=0.1)
+
+    warm.arm()
+
+    assert warm.done.wait(2) and ran == [1]
+
+
+def test_one_failing_loader_does_not_stop_the_others():
+
+    from app.voice.warmup import WarmUp
+
+    ran = []
+
+    def broken():
+        raise OSError("no network")
+
+    warm = WarmUp([broken, lambda: ran.append("next")])
+
+    warm.go()
+
+    assert warm.done.wait(2) and ran == ["next"]
+
+
+def test_the_listener_announces_that_it_is_listening():
+
+    started = []
+
+    listener = WakeWordListener(
+        on_wake=lambda: None,
+        model_factory=lambda word: ScriptedModel([]),
+        stream_factory=lambda cb: type("S", (), {"start": lambda self: None, "stop": lambda self: None, "close": lambda self: None, "active": True})(),
+        on_started=lambda: started.append(True),
+    )
+
+    listener.start()
+
+    try:
+        assert started == [True]
+
+    finally:
+        listener.stop()

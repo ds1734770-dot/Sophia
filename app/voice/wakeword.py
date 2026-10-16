@@ -137,6 +137,7 @@ class WakeWordListener:
         stream_factory=open_input_stream,
         clock=time.monotonic,
         verifier=None,
+        on_started=None,
     ):
 
         self.on_wake = on_wake
@@ -158,6 +159,7 @@ class WakeWordListener:
         # verifier(audio) -> bool: does this audio really say the name?
         # Used for scores that are only a little like the wake word.
         self.verifier = verifier
+        self.on_started = on_started
         self._verifying = False
         self._last_verify = -VERIFY_GAP_SECONDS
 
@@ -200,6 +202,14 @@ class WakeWordListener:
         self._thread.start()
 
         log.info("Listening for the wake word '%s'", self.word)
+
+        if self.on_started is not None:
+
+            try:
+                self.on_started()
+
+            except Exception:
+                log.exception("on_started failed")
 
     def _open_stream(self):
 

@@ -137,6 +137,10 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
 
     speaker = recorder_factory = transcriber = wake_factory = None
 
+    warm_up = None
+
+    warm_loaders = []
+
     if voice:
 
         from app.voice.listener import Recorder, Transcriber
@@ -155,8 +159,7 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
                 length_scale=(1.0 / settings.piper_speed) if settings.piper_speed != 1.0 else None,
             )
 
-            # loading the voice takes several seconds: do it now, in the background
-            piper.start_preload()
+            warm_loaders.append(piper.preload)
 
             def backend():
                 return PiperBackend(piper, fallback=SapiBackend())
@@ -177,7 +180,15 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         recorder_factory = Recorder
         transcriber = Transcriber(settings.whisper_model)
 
+        # a small, quick model double-checks a weak wake word match
+        checker = Transcriber(settings.wake_check_model)
+
         spoken = settings.wake_word.split("_")[-1]
+
+        from app.voice.warmup import WarmUp
+
+        # in this order: the speech model, the wake word check, then the voice
+        warm_up = WarmUp([transcriber.preload, checker.preload] + warm_loaders)
 
         def wake_factory(on_wake):
             return WakeWordListener(
@@ -185,8 +196,12 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
                 word=settings.wake_word,
                 threshold=settings.wake_threshold,
                 # a weak match is confirmed by listening to what was said
-                verifier=lambda audio: transcriber.hears(audio, (spoken,)),
+                verifier=lambda audio: checker.hears(audio, (spoken,)),
+                # the wake word goes first; the rest loads once it listens
+                on_started=warm_up.go,
             )
+
+        warm_up.arm()
 
     # Other agents (Claude Code hooks, the notify command) report here
     hub = agent_server = None
@@ -215,13 +230,6 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         wake_factory=wake_factory,
         agent_hub=hub,
     )
-
-    # load the speech model while Sophia starts, not on the first request
-    if transcriber is not None:
-
-        import threading
-
-        threading.Thread(target=transcriber.preload, name="speech-preload", daemon=True).start()
 
     car = controller = None
 
