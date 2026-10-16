@@ -779,7 +779,7 @@ def test_screen_commands_run_locally(said, expected):
 
 
 @pytest.mark.parametrize("said", [
-    "open WhatsApp and call Srino",
+    "open WhatsApp and search for Srino in the archived chats",
     "click",
     "go to the shop and buy milk",
     "what is a copy machine",
