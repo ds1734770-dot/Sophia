@@ -7,10 +7,20 @@ reached, speech falls back to the offline Windows voice.
 import asyncio
 import io
 import logging
+import time
 
 log = logging.getLogger("sophia.voice")
 
 DEFAULT_VOICE = "en-IN-NeerjaNeural"
+
+# One attempt may take this long at most (connecting, then the whole sentence)
+CONNECT_TIMEOUT = 4
+TOTAL_TIMEOUT = 12
+
+# After the neural voice fails, the Windows voice is used straight away
+# for a while (longer after each repeated failure) instead of waiting for
+# the network on every sentence.
+RETRY_AFTER = (60, 180, 600)
 
 
 def synthesize_mp3(text, voice):
@@ -24,14 +34,22 @@ def synthesize_mp3(text, voice):
 
         chunks = []
 
-        async for chunk in edge_tts.Communicate(text, voice).stream():
+        communicate = edge_tts.Communicate(
+            text, voice, connect_timeout=CONNECT_TIMEOUT, receive_timeout=TOTAL_TIMEOUT
+        )
+
+        async for chunk in communicate.stream():
 
             if chunk["type"] == "audio":
                 chunks.append(chunk["data"])
 
         return b"".join(chunks)
 
-    return asyncio.run(run())
+    async def limited():
+
+        return await asyncio.wait_for(run(), TOTAL_TIMEOUT)
+
+    return asyncio.run(limited())
 
 
 def decode_mp3(data):
@@ -103,6 +121,7 @@ class EdgeBackend:
         synthesize=synthesize_mp3,
         decode=decode_mp3,
         output=None,
+        clock=time.monotonic,
     ):
 
         self.voice = voice
@@ -113,6 +132,10 @@ class EdgeBackend:
         self._output = output
 
         self._using_fallback = False
+
+        self._clock = clock
+        self._failures = 0
+        self._retry_at = 0.0
 
     @property
     def output(self):
@@ -126,6 +149,15 @@ class EdgeBackend:
 
         self._using_fallback = False
 
+        # recently failed: do not make her wait for the network again
+        if self.fallback is not None and self._clock() < self._retry_at:
+
+            self._using_fallback = True
+
+            self.fallback.start(text)
+
+            return
+
         try:
 
             samples, rate = self._decode(self._synthesize(text, self.voice))
@@ -135,9 +167,22 @@ class EdgeBackend:
 
             self.output.play(samples, rate)
 
+            if self._failures:
+                log.info("Neural voice is working again")
+
+            self._failures = 0
+
         except Exception as e:
 
-            log.info("Neural voice unavailable (%s); using the Windows voice", e)
+            wait = RETRY_AFTER[min(self._failures, len(RETRY_AFTER) - 1)]
+
+            self._failures += 1
+            self._retry_at = self._clock() + wait
+
+            log.info(
+                "Neural voice unavailable (%s); using the Windows voice for the next %d s",
+                str(e)[:120], wait,
+            )
 
             if self.fallback is None:
                 raise

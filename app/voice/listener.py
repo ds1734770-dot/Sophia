@@ -332,6 +332,8 @@ class Transcriber:
 
         text = self.transcribe_quick(audio)
 
+        log.info("Wake word check heard: %r", text)
+
         return mentions(text, names)
 
     def transcribe_quick(self, audio):

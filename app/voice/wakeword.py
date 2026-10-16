@@ -485,13 +485,19 @@ class WakeWordListener:
             audio = self.audio_since(stamp - VERIFY_WINDOW_SECONDS)
 
             if len(audio) < SAMPLE_RATE * 0.5:
+
+                log.info("Wake word: possible (score %.2f), but too little audio to check", score)
+
                 return
+
+            started = time.monotonic()
 
             heard = bool(self.verifier(audio))
 
             log.info(
-                "Wake word: possible (score %.2f), speech check %s",
+                "Wake word: possible (score %.2f), speech check %s (%.1f s)",
                 score, "confirmed it" if heard else "did not hear the name",
+                time.monotonic() - started,
             )
 
             if heard and not self._paused and self.running:

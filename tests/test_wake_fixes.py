@@ -448,3 +448,132 @@ def test_a_paused_listener_ignores_a_late_confirmation(monkeypatch):
     time.sleep(0.4)
 
     assert not woke.is_set()
+
+
+# ---------------------------------------------------------------
+# The neural voice does not make her wait when it is down
+# ---------------------------------------------------------------
+
+class FakeFallback:
+
+    def __init__(self):
+        self.spoken = []
+
+    def start(self, text):
+        self.spoken.append(text)
+
+    def done(self, timeout_ms):
+        return True
+
+    def purge(self):
+        pass
+
+
+class FakeOutput:
+
+    def __init__(self):
+        self.played = 0
+
+    def play(self, samples, rate):
+        self.played += 1
+
+    def busy(self):
+        return False
+
+    def stop(self):
+        pass
+
+
+def edge_backend(synthesize):
+
+    from app.voice.neural_voice import EdgeBackend
+
+    clock = {"now": 1000.0}
+
+    fallback = FakeFallback()
+    output = FakeOutput()
+
+    backend = EdgeBackend(
+        fallback=fallback,
+        synthesize=synthesize,
+        decode=lambda data: (np.ones(10, dtype="float32"), 24000),
+        output=output,
+        clock=lambda: clock["now"],
+    )
+
+    return backend, fallback, output, clock
+
+
+def test_after_a_failure_the_windows_voice_speaks_at_once_for_a_while():
+
+    calls = []
+
+    def down(text, voice):
+        calls.append(text)
+        raise OSError("timeout")
+
+    backend, fallback, output, clock = edge_backend(down)
+
+    backend.start("one")
+    backend.start("two")
+    backend.start("three")
+
+    assert calls == ["one"]                      # the network was tried once, not three times
+    assert fallback.spoken == ["one", "two", "three"]
+
+
+def test_the_neural_voice_is_tried_again_later_and_the_wait_grows():
+
+    calls = []
+
+    def down(text, voice):
+        calls.append(clock_now())
+        raise OSError("timeout")
+
+    backend, fallback, output, clock = edge_backend(down)
+
+    clock_now = lambda: clock["now"]
+
+    backend.start("a")                           # fails: wait 60 s
+    clock["now"] += 61
+    backend.start("b")                           # tries again, fails: wait 180 s
+    clock["now"] += 100
+    backend.start("c")                           # still waiting
+
+    assert len(calls) == 2
+
+    clock["now"] += 100
+    backend.start("d")                           # 200 s since the second failure
+
+    assert len(calls) == 3
+
+
+def test_a_working_voice_resets_the_wait():
+
+    state = {"ok": False}
+
+    def maybe(text, voice):
+
+        if not state["ok"]:
+            raise OSError("down")
+
+        return b"mp3"
+
+    backend, fallback, output, clock = edge_backend(maybe)
+
+    backend.start("a")                           # fails
+
+    state["ok"] = True
+    clock["now"] += 61
+
+    backend.start("b")                           # works
+
+    assert output.played == 1 and fallback.spoken == ["a"]
+
+    state["ok"] = False
+    backend.start("c")                           # fails again: only the shortest wait
+
+    clock["now"] += 61
+    backend.start("d")
+
+    assert fallback.spoken == ["a", "c", "d"]
