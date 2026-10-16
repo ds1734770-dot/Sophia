@@ -116,7 +116,7 @@ Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program 
 - **Hands-free is on by default.** Say **"Hey Jarvis"** at any time while Sophia is running: with the car on screen it starts listening at once; with the car hidden (Alt+S) it drives out silently and listens. A spoken request gets a spoken reply. Turn it off in the chat menu (Hands-free).
 - **Speech recognition** runs on your PC with [faster-whisper](https://github.com/SYSTRAN/faster-whisper): audio never leaves the computer and uses no quota. The model (about 140 MB for `base.en`) downloads the first time. To improve accuracy it levels quiet microphone audio, adapts to the room's background noise, keeps the first words of your request after the wake word, tells Whisper which commands to expect, and discards noise it would otherwise turn into phrases like "thank you". On a test set of spoken commands in four accents with a quiet, noisy microphone this cut word errors from 16.8% to 12.5%. `WHISPER_MODEL=small.en` is slightly more accurate but about three times slower.
 - **The wake word keeps running:** the model runs on its own thread, the microphone is reopened automatically if it stops (sleep and wake, device changes), and errors are logged to `data/logs/sophia.log` instead of ending the listener.
-- **Spoken replies** use Microsoft Edge's neural voices (natural, needs internet) and fall back to the offline Windows voice. Pick a voice with `TTS_VOICE`.
+- **Spoken replies** use **Piper**, a natural neural voice that runs on your PC: offline, no account, no quota, and it starts talking after the first sentence (about half a second). The voice model (about 60 MB) downloads into `data/models/piper` the first time and loads in the background when Sophia starts; until it is ready the Windows voice covers. Choose the engine with `TTS_ENGINE` (`piper` default, `edge` for Microsoft's online voice, `windows` for the built-in one), the voice with `PIPER_VOICE` (for example `en_US-amy-medium`; list at huggingface.co/rhasspy/piper-voices) and the pace with `PIPER_SPEED` (1.2 is 20% faster). Download another voice with `python -m piper.download_voices en_US-amy-medium --download-dir data/models/piper`.
 - The wake word model is [openwakeword](https://github.com/dscripka/openWakeWord) ("Hey Jarvis"); lower `WAKE_THRESHOLD` if it misses you. A custom "Hey Sophia" word needs a trained model.
 
 ## Gemini quota
@@ -185,7 +185,10 @@ Environment variables or `.env`:
 | `REQUEST_TIMEOUT` | `30` | Seconds before a request is given up |
 | `THINKING_LEVEL` | `low` | How long Gemini thinks (`minimal`, `low`, `medium`, `high`; lower is faster) |
 | `WHISPER_MODEL` | `base.en` | Local speech model (`tiny.en` is smaller and faster) |
-| `TTS_VOICE` | `en-IN-NeerjaNeural` | Neural voice for replies |
+| `TTS_ENGINE` | `piper` | Voice engine: `piper` (offline), `edge` (online) or `windows` |
+| `PIPER_VOICE` | `en_GB-jenny_dioco-medium` | Offline voice (downloaded on first use) |
+| `PIPER_SPEED` | `1.0` | Speaking pace for Piper (1.2 = 20% faster) |
+| `TTS_VOICE` | `en-IN-NeerjaNeural` | Voice for the online `edge` engine |
 | `NEURAL_VOICE` | `true` | Set to `false` to always use the offline Windows voice |
 | `WAKE_WORD` | `hey_jarvis` | Wake word model |
 | `WAKE_THRESHOLD` | `0.5` | Lower is more sensitive |

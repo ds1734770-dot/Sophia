@@ -144,7 +144,26 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         from app.voice.speaker import SapiBackend, Speaker
         from app.voice.wakeword import WakeWordListener
 
-        if settings.neural_voice:
+        if settings.tts_engine == "piper":
+
+            from app.voice.piper_voice import PiperBackend, PiperEngine
+
+            piper = PiperEngine(
+                settings.piper_voice,
+                DATA_DIR / "models" / "piper",
+                # a smaller number speaks faster: PIPER_SPEED=1.2 is 20% faster
+                length_scale=(1.0 / settings.piper_speed) if settings.piper_speed != 1.0 else None,
+            )
+
+            # loading the voice takes several seconds: do it now, in the background
+            piper.start_preload()
+
+            def backend():
+                return PiperBackend(piper, fallback=SapiBackend())
+
+            speaker = Speaker(backend_factory=backend)
+
+        elif settings.tts_engine == "edge" and settings.neural_voice:
 
             def backend():
                 return EdgeBackend(settings.tts_voice, fallback=SapiBackend())

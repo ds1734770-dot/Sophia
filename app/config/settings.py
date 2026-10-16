@@ -36,6 +36,17 @@ class Settings:
         )
         self.whisper_model = os.getenv("WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
         self.tts_voice = os.getenv("TTS_VOICE") or DEFAULT_TTS_VOICE
+        # Which voice speaks: "piper" (offline neural voice, the default),
+        # "edge" (Microsoft's online neural voice) or "windows"
+        self.tts_engine = (os.getenv("TTS_ENGINE") or "piper").strip().lower()
+        self.piper_voice = os.getenv("PIPER_VOICE") or "en_GB-jenny_dioco-medium"
+
+        try:
+            self.piper_speed = float(os.getenv("PIPER_SPEED") or 1.0)
+
+        except ValueError:
+            self.piper_speed = 1.0
+
         self.neural_voice = (os.getenv("NEURAL_VOICE") or "true").lower() not in ("0", "false", "no")
         self.wake_word = os.getenv("WAKE_WORD") or DEFAULT_WAKE_WORD
         self.wake_threshold = float(os.getenv("WAKE_THRESHOLD") or 0.5)
