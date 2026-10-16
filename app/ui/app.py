@@ -130,7 +130,7 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
     # One Sophia at a time (two orbs would fight over the microphone)
     from PySide6.QtCore import QLockFile
 
-    from app.settings.paths import DATA_DIR
+    from app.settings.paths import DATA_DIR, LOGS_DIR
 
     lock = QLockFile(str(DATA_DIR / "sophia.lock"))
     lock.setStaleLockTime(5000)
@@ -204,7 +204,9 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
             # Moonshine: about twice as fast as Whisper for a command (and
             # the tiny one about six times), with Whisper as the fallback
             transcriber = FallbackTranscriber(
-                MoonshineTranscriber(settings.moonshine_model), whisper
+                MoonshineTranscriber(settings.moonshine_model), whisper,
+                # the last few requests are kept (locally) to investigate problems
+                samples_folder=LOGS_DIR / "voice",
             )
 
             # a small, quick model double-checks a weak wake word match
@@ -215,7 +217,11 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         from app.voice.warmup import WarmUp
 
         # in this order: the speech model, the wake word check, then the voice
-        warm_up = WarmUp([transcriber.preload, checker.preload] + warm_loaders)
+        warm_up = WarmUp(
+            [transcriber.preload, checker.preload] + warm_loaders
+            # Whisper is the safety net: have it ready before it is needed
+            + ([whisper.preload] if settings.stt_engine != "whisper" else [])
+        )
 
         def wake_factory(on_wake):
             return WakeWordListener(

@@ -248,8 +248,9 @@ class MoonshineTranscriber:
         text = clean_text(self._recognize(audio))
 
         log.info(
-            "Heard %r (%.1f s of speech, recognized in %.2f s, Moonshine %s)",
-            text, len(audio) / SAMPLE_RATE, time.monotonic() - started, self.name,
+            "Heard %r (%.1f s of speech, loudest %.3f, recognized in %.2f s, Moonshine %s)",
+            text, len(audio) / SAMPLE_RATE, float(np.max(np.abs(audio))),
+            time.monotonic() - started, self.name,
         )
 
         return text
@@ -277,10 +278,16 @@ class FallbackTranscriber:
     internet for the first download), Whisper takes over.
     """
 
-    def __init__(self, primary, secondary):
+    # A clip this long and this loud had speech in it: if the fast
+    # recognizer wrote nothing, the slower one is asked
+    MIN_SPEECH_SECONDS = 0.6
+    MIN_SPEECH_PEAK = 0.02
+
+    def __init__(self, primary, secondary, samples_folder=None):
 
         self.primary = primary
         self.secondary = secondary
+        self.samples_folder = samples_folder
 
         self._primary_broken = False
 
@@ -312,9 +319,43 @@ class FallbackTranscriber:
 
             self.secondary.preload()
 
+    def _had_speech(self, audio):
+
+        if audio is None or len(audio) < SAMPLE_RATE * self.MIN_SPEECH_SECONDS:
+            return False
+
+        centred = np.asarray(audio, dtype="float32") - float(np.mean(audio))
+
+        return float(np.max(np.abs(centred))) >= self.MIN_SPEECH_PEAK
+
     def transcribe(self, audio):
 
-        return self._use("transcribe", audio)
+        text = self._use("transcribe", audio)
+
+        engine = "fast" if not self._primary_broken else "whisper"
+
+        # never lose a command: nothing heard in a clip that clearly held
+        # speech is worth a second opinion
+        if not text and not self._primary_broken and self._had_speech(audio):
+
+            log.info("The fast recognizer heard nothing in a clip with speech; asking Whisper")
+
+            try:
+
+                text = self.secondary.transcribe(audio)
+
+                engine = "whisper (second opinion)"
+
+            except Exception as e:
+                log.warning("Whisper could not help either: %s", e)
+
+        if self.samples_folder is not None and audio is not None and len(audio):
+
+            from app.voice.voicelog import save_sample
+
+            save_sample(audio, text, self.samples_folder, engine)
+
+        return text
 
     def hears(self, audio, names=("jarvis",)):
 

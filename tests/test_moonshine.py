@@ -395,3 +395,113 @@ def test_the_real_model_hears_a_spoken_command():
 
     assert "github" in text.lower()
     assert real.hears(speech, ("jarvis",))
+
+
+# ---------------------------------------------------------------
+# Never lose a command
+# ---------------------------------------------------------------
+
+class Counting:
+
+    def __init__(self, text):
+        self.text = text
+        self.calls = 0
+
+    def preload(self):
+        pass
+
+    def transcribe(self, audio):
+        self.calls += 1
+        return self.text
+
+    def hears(self, audio, names):
+        return False
+
+
+def test_whisper_is_asked_when_the_fast_one_hears_nothing_in_real_speech():
+
+    fast, slow = Counting(""), Counting("open GitHub")
+
+    t = FallbackTranscriber(fast, slow)
+
+    assert t.transcribe(tone(2.0, 0.3)) == "open GitHub"
+    assert fast.calls == 1 and slow.calls == 1
+
+
+def test_whisper_is_not_asked_when_the_fast_one_has_an_answer():
+
+    fast, slow = Counting("open GitHub"), Counting("something else")
+
+    assert FallbackTranscriber(fast, slow).transcribe(tone(2.0)) == "open GitHub"
+    assert slow.calls == 0
+
+
+def test_whisper_is_not_asked_about_silence_or_tiny_clips():
+
+    fast, slow = Counting(""), Counting("hallucination")
+
+    t = FallbackTranscriber(fast, slow)
+
+    assert t.transcribe(np.zeros(RATE * 2, dtype="float32")) == ""
+    assert t.transcribe(tone(0.3, 0.3)) == ""
+    assert t.transcribe(tone(2.0, 0.005)) == ""                # a murmur below the limit
+    assert slow.calls == 0
+
+
+def test_a_second_opinion_that_fails_still_returns_quietly():
+
+    class Broken(Counting):
+
+        def transcribe(self, audio):
+            raise RuntimeError("whisper missing")
+
+    assert FallbackTranscriber(Counting(""), Broken("")).transcribe(tone(2.0)) == ""
+
+
+# ---------------------------------------------------------------
+# The last few recordings are kept (locally) for investigation
+# ---------------------------------------------------------------
+
+def test_recent_requests_are_saved_and_old_ones_deleted(tmp_path):
+
+    from app.voice.voicelog import save_sample
+
+    for i in range(15):
+        save_sample(tone(1.0), f"text {i}", tmp_path, "fast", keep=5, clock=lambda i=i: 1_700_000_000 + i)
+
+    wavs = sorted(tmp_path.glob("*.wav"))
+
+    assert len(wavs) == 5 and len(list(tmp_path.glob("*.txt"))) == 5
+
+    newest = wavs[-1].with_suffix(".txt").read_text()
+
+    assert "text: text 14" in newest and "engine: fast" in newest and "seconds: 1.0" in newest
+
+
+def test_two_requests_in_one_second_do_not_overwrite_each_other(tmp_path):
+
+    from app.voice.voicelog import save_sample
+
+    save_sample(tone(), "a", tmp_path, clock=lambda: 1_700_000_000)
+    save_sample(tone(), "b", tmp_path, clock=lambda: 1_700_000_000)
+
+    assert len(list(tmp_path.glob("*.wav"))) == 2
+
+
+def test_saving_a_sample_never_breaks_recognition(tmp_path):
+
+    blocker = tmp_path / "not_a_folder"
+    blocker.write_text("x")
+
+    t = FallbackTranscriber(Counting("open GitHub"), Counting(""), samples_folder=blocker / "voice")
+
+    assert t.transcribe(tone(2.0)) == "open GitHub"
+
+
+def test_the_transcriber_saves_what_it_heard(tmp_path):
+
+    t = FallbackTranscriber(Counting("open GitHub"), Counting(""), samples_folder=tmp_path)
+
+    t.transcribe(tone(2.0))
+
+    assert "text: open GitHub" in next(tmp_path.glob("*.txt")).read_text()
