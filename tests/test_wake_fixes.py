@@ -124,7 +124,7 @@ def test_wakes_and_near_misses_are_written_to_the_log(caplog):
     text = caplog.text
 
     assert "heard something (score 0.30, needs 0.50)" in text
-    assert "Wake word heard (score 0.90)" in text
+    assert "Wake word heard (score 0.90, model)" in text
 
 
 # ---------------------------------------------------------------
@@ -302,3 +302,149 @@ def test_the_speech_model_loads_once_even_when_preloaded_and_used_together():
     warm.join()
 
     assert loads == ["base.en"]
+
+
+# ---------------------------------------------------------------
+# A weak match is confirmed by listening to what was said
+# ---------------------------------------------------------------
+
+@pytest.mark.parametrize("text,expected", [
+    ("Hey Jarvis", True),
+    ("hey, jarvis.", True),
+    ("Hey Travis", True),
+    ("hey jervis open notepad", True),
+    ("hello there", False),
+    ("thank you", False),
+    ("what service is this", False),
+    ("", False),
+])
+def test_the_name_is_recognised_even_when_misheard(text, expected):
+
+    from app.voice.listener import mentions
+
+    assert mentions(text, ("jarvis",)) is expected
+
+
+def test_transcriber_hears_a_name_in_a_clip():
+
+    from types import SimpleNamespace
+
+    from app.voice.listener import Transcriber
+
+    class Model:
+
+        def __init__(self, text):
+            self.text = text
+
+        def transcribe(self, audio, **options):
+            assert options["beam_size"] == 1
+            return [SimpleNamespace(text=self.text)], None
+
+    tone = (np.sin(np.linspace(0, 900, 24000)) * 0.2).astype("float32")
+
+    assert Transcriber(model_factory=lambda n: Model("Hey Travis.")).hears(tone, ("jarvis",))
+    assert not Transcriber(model_factory=lambda n: Model("Thank you.")).hears(tone, ("jarvis",))
+    assert not Transcriber(model_factory=lambda n: Model("Hey Jarvis")).hears(np.zeros(24000, dtype="float32"), ("jarvis",))
+
+
+def verified_listener(monkeypatch, scores, answer):
+
+    from app.voice import wakeword
+
+    monkeypatch.setattr(wakeword, "VERIFY_DELAY_SECONDS", 0.0)
+
+    asked = []
+
+    def verifier(audio):
+
+        asked.append(len(audio))
+
+        return answer
+
+    heard = []
+    woke = threading.Event()
+
+    clock = {"now": 100.0}
+
+    listener = WakeWordListener(
+        on_wake=lambda: (heard.append(True), woke.set()),
+        model_factory=lambda word: ScriptedModel(scores),
+        stream_factory=lambda cb: None,
+        clock=lambda: clock["now"],
+        verifier=verifier,
+    )
+
+    listener._model = listener._model_factory("hey_jarvis")
+    listener.running = True
+
+    # two seconds of recent audio in the ring buffer
+    for i in range(25):
+        listener._ring.append((99.0 + i * 0.08, np.full(1280, 0.05, dtype="float32")))
+
+    return listener, heard, woke, clock, asked
+
+
+def test_a_weak_match_that_the_speech_check_confirms_wakes_sophia(monkeypatch):
+
+    listener, heard, woke, clock, asked = verified_listener(monkeypatch, [0.28], True)
+
+    feed(listener, clock, 1)
+
+    assert woke.wait(2) and len(heard) == 1
+    assert asked and asked[0] >= 16000 * 0.5
+
+
+def test_a_weak_match_the_speech_check_rejects_does_not(monkeypatch):
+
+    listener, heard, woke, clock, asked = verified_listener(monkeypatch, [0.28], False)
+
+    feed(listener, clock, 1)
+
+    time.sleep(0.4)
+
+    assert asked and not woke.is_set()
+
+
+def test_noise_is_not_even_checked(monkeypatch):
+
+    listener, heard, woke, clock, asked = verified_listener(monkeypatch, [0.05, 0.1, 0.12], True)
+
+    feed(listener, clock, 3)
+
+    time.sleep(0.2)
+
+    assert asked == [] and not woke.is_set()
+
+
+def test_checks_are_rate_limited(monkeypatch):
+
+    listener, heard, woke, clock, asked = verified_listener(monkeypatch, [0.28] * 5, False)
+
+    feed(listener, clock, 5)                       # 0.4 s of weak scores
+
+    time.sleep(0.4)
+
+    assert len(asked) == 1
+
+
+def test_a_paused_listener_ignores_a_late_confirmation(monkeypatch):
+
+    listener, heard, woke, clock, asked = verified_listener(monkeypatch, [0.28], True)
+
+    listener._paused = False
+
+    original = listener.verifier
+
+    def slow(audio):
+
+        listener._paused = True                    # Sophia started listening meanwhile
+
+        return original(audio)
+
+    listener.verifier = slow
+
+    feed(listener, clock, 1)
+
+    time.sleep(0.4)
+
+    assert not woke.is_set()

@@ -257,6 +257,26 @@ def clean_text(text):
     return text
 
 
+def mentions(text, names, cutoff=0.66):
+    """
+    Is one of `names` in `text`, allowing for how a recognizer mishears
+    it? ("Hey Travis" and "hey jervis" both count for Jarvis.)
+    """
+
+    import difflib
+
+    words = re.findall(r"[a-z']+", text.lower())
+
+    for name in names:
+
+        for word in words:
+
+            if difflib.SequenceMatcher(None, word, name.lower()).ratio() >= cutoff:
+                return True
+
+    return False
+
+
 class Transcriber:
     """
     Local Whisper. The model loads the first time it is needed.
@@ -302,6 +322,35 @@ class Transcriber:
                 self._model = self._model_factory(self.model_name)
 
         return self._model
+
+    def hears(self, audio, names=("jarvis",)):
+        """
+        Does this short audio contain one of the names? Used to confirm
+        the wake word: the words are compared loosely, because the
+        recognizer may write "Jarvis" as "Travis", "Jarvas" or "Jervis".
+        """
+
+        text = self.transcribe_quick(audio)
+
+        return mentions(text, names)
+
+    def transcribe_quick(self, audio):
+        """
+        A fast, plain transcription (no vocabulary hint, one beam) of a
+        short clip.
+        """
+
+        audio = prepare_audio(audio)
+
+        if audio is None:
+            return ""
+
+        segments, _ = self._ensure_model().transcribe(
+            audio, language="en", beam_size=1, vad_filter=False,
+            condition_on_previous_text=False,
+        )
+
+        return " ".join(segment.text.strip() for segment in segments)
 
     def transcribe(self, audio):
         """

@@ -48,6 +48,14 @@ CONFIRM_BLOCKS = 2
 NEAR_MISS_LOG_SECONDS = 2.0
 NEAR_MISS_SCORE = 0.2
 
+# A score this fraction of the threshold or more is "something like the
+# wake word": the speech recognizer is asked to confirm that the last
+# seconds really contained the name (see WakeWordListener.verifier).
+VERIFY_FACTOR = 0.36
+VERIFY_GAP_SECONDS = 1.5
+VERIFY_DELAY_SECONDS = 0.55          # let the end of the phrase arrive
+VERIFY_WINDOW_SECONDS = 2.6          # how much audio before it to check
+
 
 def wake_decision(score, threshold, streak):
     """
@@ -128,6 +136,7 @@ class WakeWordListener:
         model_factory=load_wake_model,
         stream_factory=open_input_stream,
         clock=time.monotonic,
+        verifier=None,
     ):
 
         self.on_wake = on_wake
@@ -145,6 +154,12 @@ class WakeWordListener:
         self.last_wake_time = None
         self._streak = 0
         self._last_near_miss = -NEAR_MISS_LOG_SECONDS
+
+        # verifier(audio) -> bool: does this audio really say the name?
+        # Used for scores that are only a little like the wake word.
+        self.verifier = verifier
+        self._verifying = False
+        self._last_verify = -VERIFY_GAP_SECONDS
 
         self._queue = queue.Queue(maxsize=400)
         self._ring = collections.deque()
@@ -420,14 +435,72 @@ class WakeWordListener:
 
             log.info("Wake word: heard something (score %.2f, needs %.2f)", score, self.threshold)
 
-        if wake and now - self._last_wake >= COOLDOWN_SECONDS:
+        if wake:
 
-            self._streak = 0
-            self._last_wake = now
-            self.last_wake_time = now
+            self._trigger(now, score, "model")
 
-            log.info("Wake word heard (score %.2f)", score)
+        elif (
+            self.verifier is not None
+            and not self._verifying
+            and score >= self.threshold * VERIFY_FACTOR
+            and now - self._last_verify >= VERIFY_GAP_SECONDS
+            and now - self._last_wake >= COOLDOWN_SECONDS
+        ):
 
-            # the callback may be slow (it opens the recorder): do not
-            # block the audio worker
-            threading.Thread(target=self.on_wake, daemon=True).start()
+            self._last_verify = now
+            self._verifying = True
+
+            threading.Thread(
+                target=self._verify, args=(now, score), name="wake-verify", daemon=True
+            ).start()
+
+    def _trigger(self, now, score, how):
+        """
+        Wake Sophia (once per cooldown).
+        """
+
+        if now - self._last_wake < COOLDOWN_SECONDS:
+            return
+
+        self._streak = 0
+        self._last_wake = now
+        self.last_wake_time = now
+
+        log.info("Wake word heard (score %.2f, %s)", score, how)
+
+        # the callback may be slow (it opens the recorder): do not
+        # block the audio worker
+        threading.Thread(target=self.on_wake, daemon=True).start()
+
+    def _verify(self, stamp, score):
+        """
+        The model heard something like the wake word: let the speech
+        recognizer decide whether it really was the name.
+        """
+
+        try:
+
+            time.sleep(VERIFY_DELAY_SECONDS)
+
+            audio = self.audio_since(stamp - VERIFY_WINDOW_SECONDS)
+
+            if len(audio) < SAMPLE_RATE * 0.5:
+                return
+
+            heard = bool(self.verifier(audio))
+
+            log.info(
+                "Wake word: possible (score %.2f), speech check %s",
+                score, "confirmed it" if heard else "did not hear the name",
+            )
+
+            if heard and not self._paused and self.running:
+                self._trigger(stamp, score, "confirmed by speech")
+
+        except Exception:
+
+            log.exception("Wake word verification failed")
+
+        finally:
+
+            self._verifying = False

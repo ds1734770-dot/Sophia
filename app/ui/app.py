@@ -158,11 +158,15 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         recorder_factory = Recorder
         transcriber = Transcriber(settings.whisper_model)
 
+        spoken = settings.wake_word.split("_")[-1]
+
         def wake_factory(on_wake):
             return WakeWordListener(
                 on_wake,
                 word=settings.wake_word,
                 threshold=settings.wake_threshold,
+                # a weak match is confirmed by listening to what was said
+                verifier=lambda audio: transcriber.hears(audio, (spoken,)),
             )
 
     # Other agents (Claude Code hooks, the notify command) report here
