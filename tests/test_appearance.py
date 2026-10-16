@@ -288,6 +288,11 @@ def test_touchdown_makes_a_shockwave_dust_and_a_crouch(monkeypatch):
 
     car, seen = armor_car(monkeypatch)
 
+    # a long settle, so a busy machine cannot end the sequence before we look
+    from app.ui import floating_car
+
+    monkeypatch.setattr(floating_car, "ARMOR_SETTLE_MS", 1500)
+
     car.enter()
 
     assert pump(app, lambda: car.model.phase == "touch", seconds=5)

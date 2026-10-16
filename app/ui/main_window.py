@@ -1,6 +1,7 @@
 import logging
 import math
 import re
+import time
 
 from PySide6.QtCore import (
     QElapsedTimer,
@@ -325,6 +326,7 @@ class MainWindow(QMainWindow):
         self._stream = None
         self._steps = None
         self._queued = None
+        self._opened_at = time.monotonic()
         self._quitting = False
 
         # the car shown in the chat window; the floating car has its own
@@ -649,6 +651,8 @@ class MainWindow(QMainWindow):
                     message["content"],
                     "user" if message["role"] == "user" else "bot",
                 )
+
+        log.info("Sophia is ready (%.1f s after the window opened)", time.monotonic() - self._opened_at)
 
         self._set_ready(True, self._idle_status())
 

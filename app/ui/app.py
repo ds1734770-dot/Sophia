@@ -110,6 +110,17 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
     except Exception:
         pass
 
+    # Sophia is a background helper that must stay responsive while other
+    # programs (trading apps, sync, browsers) keep the processor busy
+    try:
+
+        import psutil
+
+        psutil.Process().nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+
+    except Exception:
+        log.debug("Could not raise the priority", exc_info=True)
+
     app = QApplication(sys.argv)
     app.setApplicationName("Sophia")
     app.setWindowIcon(make_icon())

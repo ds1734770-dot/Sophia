@@ -29,7 +29,7 @@ THRESHOLD = 0.5
 COOLDOWN_SECONDS = 3.0
 
 # no audio for this long means the microphone stream has died
-STALL_SECONDS = 4.0
+STALL_SECONDS = 8.0
 RESTART_BACKOFF = (1.0, 3.0, 8.0, 20.0)
 
 RING_SECONDS = 4.0
@@ -189,9 +189,18 @@ class WakeWordListener:
         if self.running:
             return
 
+        began = time.monotonic()
+
         self._model = self._model_factory(self.word)
 
+        loaded = time.monotonic()
+
         self._open_stream()
+
+        log.info(
+            "Wake word start-up: model %.1f s, microphone %.1f s",
+            loaded - began, time.monotonic() - loaded,
+        )
 
         self.running = True
 
