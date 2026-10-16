@@ -324,6 +324,7 @@ class MainWindow(QMainWindow):
         self.confirm_bar = None
         self._stream = None
         self._steps = None
+        self._queued = None
         self._quitting = False
 
         # the car shown in the chat window; the floating car has its own
@@ -361,6 +362,14 @@ class MainWindow(QMainWindow):
         self._frame_timer.start(FRAME_MS)
 
         self._set_ready(False, "Starting...")
+
+        # The wake word does not need Sophia to be built (which takes a
+        # while): start listening at once, so "Hey Jarvis" works from the
+        # first seconds. A request spoken before she is ready is queued.
+        if self.wake_factory is not None and self.settings.value(
+            "hands_free", True, type=bool
+        ):
+            self.hands_free_action.setChecked(True)
 
         run_task(self.sophia_factory, (), self._on_started, self._on_start_failed)
 
@@ -641,23 +650,22 @@ class MainWindow(QMainWindow):
                     "user" if message["role"] == "user" else "bot",
                 )
 
-        self._set_ready(True, "Ready")
+        self._set_ready(True, self._idle_status())
 
         self._set_screen_confirm(self.screen_confirm_action.isChecked())
+
+        if self._queued is not None:
+
+            text, show_user = self._queued
+            self._queued = None
+
+            self.send(text, show_user)
 
         # live progress: each tool Sophia runs appears as a step
         registry = getattr(getattr(sophia, "brain", None), "registry", None)
 
         if registry is not None and hasattr(registry, "observers"):
             registry.observers.append(self.tool_event.emit)
-
-        # Remember hands-free across restarts
-        # Hands-free is on by default: Sophia answers to her wake word
-        # whenever she is running, even with the car hidden
-        if self.wake_factory is not None and self.settings.value(
-            "hands_free", True, type=bool
-        ):
-            self.hands_free_action.setChecked(True)
 
     def _set_screen_confirm(self, on):
 
@@ -698,7 +706,16 @@ class MainWindow(QMainWindow):
 
     def send(self, text, show_user=True):
 
-        if self.sophia is None or self.busy:
+        if self.sophia is None:
+
+            # still starting up: answer as soon as she is ready
+            self._queued = (text, show_user)
+
+            self.status.setText("Starting up, I'll answer in a moment...")
+
+            return
+
+        if self.busy:
             return
 
         self._drop_confirm_bar()
@@ -1201,12 +1218,16 @@ class MainWindow(QMainWindow):
         if not on and self.speaker is not None:
             self.speaker.stop()
 
-    def toggle_listening(self, preroll=None, skip=None):
+    def toggle_listening(self, _checked=False, preroll=None, skip=None):
         """
         Start (or finish) listening. `preroll` is audio from just before
         now (after a wake word) to keep; `skip` drops the first seconds
-        of capture (the start-up chime, when there is one).
+        of capture (the start-up chime, when there is one). `_checked` is
+        what a button click passes as its first argument: ignored.
         """
+
+        if isinstance(preroll, bool):
+            preroll = None
 
         if self.recorder is not None:
 
@@ -1393,7 +1414,15 @@ class MainWindow(QMainWindow):
 
         # Heard the wake word: listen for the request
         if self.wake_listener is None or self.busy or self.recorder is not None:
+
+            log.info(
+                "Wake word ignored (listener=%s, busy=%s, already listening=%s)",
+                self.wake_listener is not None, self.busy, self.recorder is not None,
+            )
+
             return
+
+        log.info("Wake word: starting to listen")
 
         listener = self.wake_listener
 

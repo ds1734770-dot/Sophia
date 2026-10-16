@@ -268,6 +268,10 @@ class Transcriber:
         self._model_factory = model_factory or self._load_model
         self._model = None
 
+        # the model may be loaded by a background warm-up and by the
+        # first request at the same time: only once
+        self._load_lock = threading.Lock()
+
     @staticmethod
     def _load_model(name):
 
@@ -279,6 +283,25 @@ class Transcriber:
             compute_type="int8",
             cpu_threads=min(8, os.cpu_count() or 4),
         )
+
+    def preload(self):
+        """
+        Load the speech model now (in the background at start-up), so the
+        first spoken request does not wait for it.
+        """
+
+        self._ensure_model()
+
+    def _ensure_model(self):
+
+        with self._load_lock:
+
+            if self._model is None:
+
+                log.info("Loading speech model %s", self.model_name)
+                self._model = self._model_factory(self.model_name)
+
+        return self._model
 
     def transcribe(self, audio):
         """
@@ -293,12 +316,7 @@ class Transcriber:
         if audio is None:
             return ""
 
-        if self._model is None:
-
-            log.info("Loading speech model %s", self.model_name)
-            self._model = self._model_factory(self.model_name)
-
-        segments, _ = self._model.transcribe(
+        segments, _ = self._ensure_model().transcribe(
             audio,
             language="en",
             beam_size=5,

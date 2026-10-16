@@ -358,9 +358,8 @@ def test_a_failing_wake_word_is_reported_and_switched_off():
 
     app = qapp()
 
+    # hands-free is on by default, so the failure happens at start-up
     window, holder, _ = make_window(app, listener_fail=True)
-
-    window.hands_free_action.setChecked(True)
 
     assert pump(app, lambda: any("wake word" in b.text() for b in window.chat.widget().findChildren(Bubble)))
     assert not window.hands_free_action.isChecked()

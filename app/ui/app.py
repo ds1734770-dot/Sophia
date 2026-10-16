@@ -193,6 +193,13 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
         agent_hub=hub,
     )
 
+    # load the speech model while Sophia starts, not on the first request
+    if transcriber is not None:
+
+        import threading
+
+        threading.Thread(target=transcriber.preload, name="speech-preload", daemon=True).start()
+
     car = controller = None
 
     if orb_mode:

@@ -37,6 +37,34 @@ NOISE_WINDOW_BLOCKS = 150        # about 12 seconds
 
 DEFAULT_WAKE_WORD = "hey_jarvis"
 
+# A score at or above the threshold wakes Sophia at once. A weaker score
+# (this fraction of the threshold or more) counts when it holds for
+# CONFIRM_BLOCKS blocks in a row: real speech of the wake word often peaks
+# a little under the threshold, but noise rarely repeats.
+WEAK_FACTOR = 0.66
+CONFIRM_BLOCKS = 2
+
+# how often a near miss is written to the log
+NEAR_MISS_LOG_SECONDS = 2.0
+NEAR_MISS_SCORE = 0.2
+
+
+def wake_decision(score, threshold, streak):
+    """
+    (wake now?, new streak of weak scores)
+    """
+
+    if score >= threshold:
+        return True, 0
+
+    if score >= threshold * WEAK_FACTOR:
+
+        streak += 1
+
+        return streak >= CONFIRM_BLOCKS, streak
+
+    return False, 0
+
 
 def spoken_name(model):
 
@@ -115,6 +143,8 @@ class WakeWordListener:
         self._paused = False
         self._last_wake = -COOLDOWN_SECONDS
         self.last_wake_time = None
+        self._streak = 0
+        self._last_near_miss = -NEAR_MISS_LOG_SECONDS
 
         self._queue = queue.Queue(maxsize=400)
         self._ring = collections.deque()
@@ -381,10 +411,22 @@ class WakeWordListener:
 
         now = self._clock() if stamp is None else stamp
 
-        if score >= self.threshold and now - self._last_wake >= COOLDOWN_SECONDS:
+        wake, self._streak = wake_decision(score, self.threshold, self._streak)
 
+        if not wake and score >= NEAR_MISS_SCORE and now - self._last_near_miss >= NEAR_MISS_LOG_SECONDS:
+
+            # so a "it never hears me" report can be checked in the log
+            self._last_near_miss = now
+
+            log.info("Wake word: heard something (score %.2f, needs %.2f)", score, self.threshold)
+
+        if wake and now - self._last_wake >= COOLDOWN_SECONDS:
+
+            self._streak = 0
             self._last_wake = now
             self.last_wake_time = now
+
+            log.info("Wake word heard (score %.2f)", score)
 
             # the callback may be slow (it opens the recorder): do not
             # block the audio worker
