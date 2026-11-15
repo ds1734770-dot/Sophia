@@ -1,6 +1,6 @@
 """
 Start-up order for the heavy voice parts. They all compete for the same
-processor, and loading them at once made "Hey Jarvis" wait nearly 40
+processor, and loading them at once made the wake word wait nearly 40
 seconds. So the wake word goes first, and once it is listening the rest
 load one after another: the speech model (needed for your first
 request), the small model that double-checks the wake word, then the

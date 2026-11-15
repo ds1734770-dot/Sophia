@@ -52,6 +52,26 @@ def load_piper_voice(path):
     return PiperVoice.load(path)
 
 
+# Voices whose license asks for credit, and how to credit them
+VOICE_CREDITS = {
+    "jenny_dioco": "Jenny (Dioco)",
+}
+
+
+def voice_credit(voice):
+    """
+    How to name a Piper voice to the user: "Jenny (Dioco)" for the default
+    (its dataset license requires that attribution), else the voice id.
+    """
+
+    for key, credit in VOICE_CREDITS.items():
+
+        if key in (voice or ""):
+            return credit
+
+    return voice
+
+
 class PiperEngine:
     """
     The loaded voice, shared by everything that speaks. Load it with

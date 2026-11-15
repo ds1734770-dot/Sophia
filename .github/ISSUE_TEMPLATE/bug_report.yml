@@ -1,0 +1,37 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Security problems go to a private report instead: see SECURITY.md. Please remove personal details (names, file paths, API keys) from logs before pasting."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you said or typed, what Sophia did, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Say 'Hey Sophia, open Chrome'\n2. ..."
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS (Apple silicon), macOS (Intel), Windows 11, Windows 10]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Sophia version
+      description: The release tag, or the output of `git rev-parse --short HEAD`
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The relevant lines of logs/sophia.log in your data folder (see PRIVACY.md for where it is).
+      render: text

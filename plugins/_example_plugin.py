@@ -1,6 +1,8 @@
 """
-Example Sophia plugin. Copy this file to data/plugins/ (without the
-leading underscore) to enable it.
+Example Sophia plugin. Copy this file into the "plugins" folder of your
+data folder (~/Library/Application Support/Sophia/plugins on macOS,
+%APPDATA%\\Sophia\\plugins on Windows) without the leading underscore,
+then allow it:  sophia --trust-plugin example_plugin.py
 
 A plugin defines TOOLS (a list of Tool objects) or a
 register(registry, services) function. Each tool's handler receives the

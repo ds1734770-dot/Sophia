@@ -213,15 +213,35 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
             # a small, quick model double-checks a weak wake word match
             checker = FallbackTranscriber(MoonshineTranscriber("tiny"), whisper_check)
 
-        spoken = settings.wake_word.split("_")[-1]
+        from app.voice.wakeword import SPEECH_NAME_CUTOFF, SPEECH_WAKE_WORDS, wake_names
+
+        spoken = wake_names(settings.wake_word)
 
         from app.voice.warmup import WarmUp
 
-        # in this order: the speech model, the wake word check, then the voice
+        if settings.wake_word in SPEECH_WAKE_WORDS:
+
+            # "Hey Sophia" is recognised by Whisper (the small models miss
+            # such a short phrase), with a strict match on the name
+            def verify(audio):
+                return whisper.hears(audio, spoken, SPEECH_NAME_CUTOFF)
+
+            first = [whisper.preload, transcriber.preload, checker.preload]
+
+        else:
+
+            # a weak keyword-model match is confirmed by listening to it
+            def verify(audio):
+                return checker.hears(audio, spoken)
+
+            first = [transcriber.preload, checker.preload]
+
+        # in this order: what the wake word needs, the speech model, then the voice
+
         warm_up = WarmUp(
-            [transcriber.preload, checker.preload] + warm_loaders
+            first + warm_loaders
             # Whisper is the safety net: have it ready before it is needed
-            + ([whisper.preload] if settings.stt_engine != "whisper" else [])
+            + ([whisper.preload] if settings.stt_engine != "whisper" and whisper.preload not in first else [])
         )
 
         def wake_factory(on_wake):
@@ -229,8 +249,7 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
                 on_wake,
                 word=settings.wake_word,
                 threshold=settings.wake_threshold,
-                # a weak match is confirmed by listening to what was said
-                verifier=lambda audio: checker.hears(audio, (spoken,)),
+                verifier=verify,
                 # the wake word goes first; the rest loads once it listens
                 on_started=warm_up.go,
             )

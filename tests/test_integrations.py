@@ -233,3 +233,30 @@ def test_plugins_with_tools_and_register_functions_load(tmp_path):
     assert loaded == ["dice.py", "greeter.py"]
     assert sorted(registry.names()) == ["greet", "roll_dice"]
     assert registry.execute("greet", {}, None).message == "hi"
+
+
+def test_plugins_in_the_user_folder_need_trust(tmp_path):
+
+    from app.tools.plugins import PluginTrust, load_plugins
+    from app.tools.registry import ToolRegistry
+
+    folder = tmp_path / "plugins"
+    folder.mkdir()
+
+    plugin = folder / "hello.py"
+    plugin.write_text("TOOLS = []\n")
+
+    trust = PluginTrust(tmp_path / "trusted.json")
+
+    assert load_plugins(ToolRegistry(), [folder], trust=trust, needs_trust=[folder]) == []
+
+    trust.trust(plugin)
+
+    assert load_plugins(ToolRegistry(), [folder], trust=trust, needs_trust=[folder]) == ["hello.py"]
+
+    # a changed file is no longer trusted
+    plugin.write_text("TOOLS = []  # changed\n")
+
+    assert load_plugins(ToolRegistry(), [folder], trust=trust, needs_trust=[folder]) == []
+
+    assert trust.untrust("hello.py") and not trust.untrust("hello.py")

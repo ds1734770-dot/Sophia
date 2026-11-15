@@ -274,12 +274,13 @@ def clean_text(text):
 def mentions(text, names, cutoff=0.66):
     """
     Is one of `names` in `text`, allowing for how a recognizer mishears
-    it? ("Hey Travis" and "hey jervis" both count for Jarvis.)
+    it? ("Hey Sofia" and "hey sophie" both count for Sophia.)
     """
 
     import difflib
 
-    words = re.findall(r"[a-z']+", text.lower())
+    # "Sophia's" is still the name
+    words = [w.removesuffix("'s") for w in re.findall(r"[a-z']+", text.lower())]
 
     for name in names:
 
@@ -337,18 +338,18 @@ class Transcriber:
 
         return self._model
 
-    def hears(self, audio, names=("jarvis",)):
+    def hears(self, audio, names=("sophia",), cutoff=0.66):
         """
         Does this short audio contain one of the names? Used to confirm
-        the wake word: the words are compared loosely, because the
-        recognizer may write "Jarvis" as "Travis", "Jarvas" or "Jervis".
+        the wake word: the words are compared loosely (as loosely as
+        `cutoff` allows), because the recognizer may misspell the name.
         """
 
         text = self.transcribe_quick(audio)
 
         log.info("Wake word check heard: %r", text)
 
-        return mentions(text, names)
+        return mentions(text, names, cutoff)
 
     def transcribe_quick(self, audio):
         """

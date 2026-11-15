@@ -1,39 +1,118 @@
+# requirements.txt pins the exact, tested versions of everything (use it to
+# install: the installers do). The ranges here are what Sophia needs, for
+# `pip install .` and packaging. Keep both in step when adding a dependency.
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "sophia"
-version = "0.2.0"
-description = "A personal AI assistant for Windows and macOS: chat, voice, and computer control."
+name = "sophia-assistant"
+version = "0.3.0"
+description = "A personal AI assistant for macOS and Windows: voice, chat, apps, files and screen control, powered by Gemini."
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "google-genai",
-    "python-dotenv",
-    "pywin32; sys_platform == 'win32'",
-    "uiautomation; sys_platform == 'win32'",
-    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
-    "pyobjc-framework-Quartz; sys_platform == 'darwin'",
-    "PySide6",
-    "faster-whisper",
-    "sounddevice",
-    "numpy",
-    "Pillow",
-    "keyring",
-    "Send2Trash",
-    "ddgs",
-    "trafilatura",
-    "requests",
-    "psutil",
-    "pypdf",
-    "pyautogui",
-    "mcp",
-    "edge-tts",
-    "openwakeword",
-    "piper-tts",
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_LICENSES.md"]
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Sophia contributors" }]
+keywords = ["assistant", "voice assistant", "gemini", "desktop automation", "accessibility"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Desktop Environment",
 ]
+dependencies = [
+    "google-genai>=2.12",
+    "python-dotenv>=1.2",
+    "PySide6>=6.11",
+    "numpy>=2.0",
+    "Pillow>=11",
+    "psutil>=7",
+    "requests>=2.32",
+    "keyring>=25",
+    "Send2Trash>=1.8",
+    "ddgs>=9",
+    "trafilatura>=2",
+    "pypdf>=6",
+    "rapidfuzz>=3",
+    "PyAutoGUI>=0.9.54",
+    "mcp>=2",
+    # voice
+    "sounddevice>=0.5",
+    "faster-whisper>=1.2",
+    "av>=14",
+    "onnxruntime>=1.20",
+    "tokenizers>=0.21",
+    "huggingface_hub>=0.30",
+    "piper-tts>=1.8",
+    "edge-tts>=7",
+    "openwakeword>=0.6",
+    # Windows
+    "pywin32>=306; sys_platform == 'win32'",
+    "comtypes>=1.4; sys_platform == 'win32'",
+    "uiautomation>=2.0; sys_platform == 'win32'",
+    # macOS
+    "pyobjc-framework-Cocoa>=11; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=11; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices>=11; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov", "ruff", "mypy", "pip-licenses", "pip-audit"]
+
+[project.scripts]
+sophia = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/ds1734770-dot/Sophia"
+Issues = "https://github.com/ds1734770-dot/Sophia/issues"
+Security = "https://github.com/ds1734770-dot/Sophia/security/policy"
+Changelog = "https://github.com/ds1734770-dot/Sophia/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+# pyflakes, real errors (E9: syntax), pylint errors, and a few bug-prone patterns
+select = ["F", "E9", "PLE", "B006", "B008", "B015", "B017", "B018", "B023", "B904"]
+
 [tool.ruff.lint.per-file-ignores]
 # pytest fixtures imported from another test module look like redefinitions
-"tests/*" = ["F811"]
+"tests/*" = ["F811", "B017", "B018"]
+
+[tool.mypy]
+python_version = "3.12"
+# the safety-critical modules are type-checked first
+files = [
+    "app/file/path_guard.py",
+    "app/computer/shell_runner.py",
+    "app/agent/guard.py",
+    "app/tools/plugins.py",
+]
+ignore_missing_imports = true
+follow_imports = "silent"
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/ui/*"]
+
+[tool.coverage.report]
+skip_covered = true
+
+[[tool.mypy.overrides]]
+module = ["app.file.path_guard", "app.computer.shell_runner", "app.agent.guard", "app.tools.plugins"]
+disallow_untyped_defs = true

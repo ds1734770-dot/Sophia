@@ -255,7 +255,7 @@ class MoonshineTranscriber:
 
         return text
 
-    def hears(self, audio, names=("jarvis",)):
+    def hears(self, audio, names=("sophia",), cutoff=0.66):
         """
         Does this short clip contain one of the names? (Wake word check.)
         """
@@ -269,7 +269,7 @@ class MoonshineTranscriber:
             text, time.monotonic() - started, self.name,
         )
 
-        return mentions(text, names)
+        return mentions(text, names, cutoff)
 
 
 class FallbackTranscriber:
@@ -357,6 +357,6 @@ class FallbackTranscriber:
 
         return text
 
-    def hears(self, audio, names=("jarvis",)):
+    def hears(self, audio, names=("sophia",), cutoff=0.66):
 
-        return self._use("hears", audio, names)
+        return self._use("hears", audio, names, cutoff)

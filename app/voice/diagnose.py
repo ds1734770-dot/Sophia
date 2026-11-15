@@ -1,15 +1,17 @@
 """
-Why doesn't "Hey Jarvis" work? Listen to the microphone exactly the way
-Sophia does and show, every second, how loud you are and how strongly the
-wake model thinks it heard the wake word.
+Why doesn't the wake word work? Listen to the microphone exactly the way
+Sophia does and show what it hears.
 
     python -m app.voice.diagnose              20 seconds on the default microphone
     python -m app.voice.diagnose --seconds 40
     python -m app.voice.diagnose --device 5   a particular input device (see --list)
     python -m app.voice.diagnose --list
+    python -m app.voice.diagnose --word hey_jarvis   an openWakeWord model instead
 
-Say "Hey Jarvis" a few times while it runs. A score of 0.50 or more is a
-detection (Sophia's threshold).
+For "Hey Sophia" (the default) it prints each phrase it noticed and what
+the speech recognizer heard in it. For an openWakeWord model it shows,
+every second, how loud you are and the model's score (0.50 or more is a
+detection).
 """
 
 import argparse
@@ -18,7 +20,16 @@ import time
 
 import numpy as np
 
-from app.voice.wakeword import BLOCK, SAMPLE_RATE, THRESHOLD, load_wake_model, wake_decision
+from app.voice.wakeword import (
+    BLOCK,
+    SAMPLE_RATE,
+    SPEECH_WAKE_WORDS,
+    THRESHOLD,
+    SpeechWakeModel,
+    load_wake_model,
+    wake_decision,
+    wake_names,
+)
 
 
 def list_devices():
@@ -46,7 +57,7 @@ def bar(value, full, width=24):
 
 def run(seconds=20, device=None, word="hey_jarvis", threshold=THRESHOLD, out=sys.stdout):
     """
-    Returns a summary dict (peak level, best score, detections).
+    An openWakeWord model: loudness and score every second. Returns a summary dict (peak level, best score, detections).
     """
 
     import sounddevice as sd
@@ -141,6 +152,104 @@ def run(seconds=20, device=None, word="hey_jarvis", threshold=THRESHOLD, out=sys
     return summary
 
 
+def run_speech(seconds=20, device=None, word="hey_sophia", out=sys.stdout):
+    """
+    "Hey Sophia": each phrase the loudness detector notices is passed to
+    the speech recognizer, as in Sophia. Returns a summary dict.
+    """
+
+    import sounddevice as sd
+
+    import os
+
+    from app.voice.listener import Transcriber
+    from app.voice.wakeword import SPEECH_NAME_CUTOFF
+
+    model_name = os.getenv("WHISPER_MODEL") or "base.en"
+
+    print(f"Loading the speech recognizer (Whisper {model_name})...", file=out)
+
+    checker = Transcriber(model_name)
+    checker.preload()
+
+    names = wake_names(word)
+    model = SpeechWakeModel(word)
+
+    blocks = []
+
+    def callback(data, frames, time_info, status):
+        blocks.append((np.copy(data[:, 0]), str(status) if status else ""))
+
+    summary = {"peak": 0.0, "best": 0.0, "detections": 0, "phrases": 0, "status": set()}
+    history = []
+
+    print(f"Say 'Hey Sophia' a few times. Listening for {seconds:.0f} s...\n", file=out)
+
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=BLOCK,
+                        device=device, callback=callback):
+
+        ended = time.monotonic() + seconds
+
+        while time.monotonic() < ended:
+
+            time.sleep(0.05)
+
+            while blocks:
+
+                chunk, status = blocks.pop(0)
+
+                if status:
+                    summary["status"].add(status)
+
+                audio = chunk.astype("float32") / 32768.0
+                history.append(audio)
+                history[:] = history[-int(3.2 * SAMPLE_RATE / BLOCK):]
+
+                summary["peak"] = max(summary["peak"], float(np.abs(audio).max()))
+
+                if model.predict(chunk)[word] > 0:
+
+                    summary["phrases"] += 1
+
+                    heard_text = checker.transcribe_quick(np.concatenate(history))
+
+                    from app.voice.listener import mentions
+
+                    heard = mentions(heard_text, names, SPEECH_NAME_CUTOFF)
+
+                    if heard:
+                        summary["detections"] += 1
+
+                    mark = "  <-- WAKE" if heard else ""
+
+                    print(f"  heard: {heard_text!r}{mark}", file=out)
+
+    return summary
+
+
+def speech_verdict(summary):
+
+    if summary["detections"]:
+        return (
+            f"'Hey Sophia' was recognised {summary['detections']} time(s): the microphone and "
+            "recognizer work. If Sophia still ignores you, check that hands-free is on."
+        )
+
+    if summary["peak"] < 0.02:
+        return (
+            f"The microphone is very quiet (peak {summary['peak']:.3f}). Check the input device and "
+            "its level, and the microphone permission for the app that runs Sophia."
+        )
+
+    if not summary["phrases"]:
+        return "No phrase was noticed. Speak a little louder, or move closer to the microphone."
+
+    return (
+        "Phrases were heard, but not the name. Say 'Hey Sophia' clearly with a short pause after "
+        "it; the lines above show what the recognizer understood."
+    )
+
+
 def verdict(summary, threshold=THRESHOLD):
     """
     What the numbers mean, in plain words.
@@ -176,7 +285,7 @@ def verdict(summary, threshold=THRESHOLD):
     return (
         f"The microphone is loud enough (peak {peak:.3f}) but the model scored at most {best:.2f}. "
         "Either the audio is poor for it (a Bluetooth headset microphone, heavy noise "
-        "suppression) or it did not hear 'Hey Jarvis' as it expects."
+        "suppression) or it did not hear the wake word as it expects."
     )
 
 
@@ -187,6 +296,7 @@ def main(argv=None):
     parser.add_argument("--device", type=int, default=None)
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--threshold", type=float, default=THRESHOLD)
+    parser.add_argument("--word", default=None, help="wake word (default: WAKE_WORD or hey_sophia)")
 
     args = parser.parse_args(argv)
 
@@ -196,7 +306,20 @@ def main(argv=None):
 
         return 0
 
-    summary = run(args.seconds, args.device, threshold=args.threshold)
+    import os
+
+    word = args.word or os.getenv("WAKE_WORD") or "hey_sophia"
+
+    if word in SPEECH_WAKE_WORDS:
+
+        summary = run_speech(args.seconds, args.device, word)
+
+        print(f"\nLoudest: {summary['peak']:.3f}   phrases: {summary['phrases']}   wake: {summary['detections']}")
+        print("\n" + speech_verdict(summary))
+
+        return 0
+
+    summary = run(args.seconds, args.device, word=word, threshold=args.threshold)
 
     print(f"\nLoudest: {summary['peak']:.3f}   best wake score: {summary['best']:.2f}   detections: {summary['detections']}")
 

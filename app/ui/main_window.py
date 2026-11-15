@@ -389,7 +389,7 @@ class MainWindow(QMainWindow):
         self._set_ready(False, "Starting...")
 
         # The wake word does not need Sophia to be built (which takes a
-        # while): start listening at once, so "Hey Jarvis" works from the
+        # while): start listening at once, so "Hey Sophia" works from the
         # first seconds. A request spoken before she is ready is queued.
         if self.wake_factory is not None and self.settings.value(
             "hands_free", True, type=bool
@@ -592,12 +592,25 @@ class MainWindow(QMainWindow):
         quit_action = QAction("Quit Sophia", self)
         quit_action.triggered.connect(self.quit)
 
+        # the default voice's license asks for this credit
+        from app.config.settings import Settings
+        from app.voice.piper_voice import voice_credit
+
+        engine = Settings().tts_engine
+
+        voice_info = QAction(
+            f"Voice: {voice_credit(Settings().piper_voice)}" if engine == "piper" else f"Voice engine: {engine}",
+            self,
+        )
+        voice_info.setEnabled(False)
+
         menu.addAction(usage)
         menu.addAction(clear)
         menu.addAction(self.hands_free_action)
         menu.addAction(self.screen_confirm_action)
         menu.addAction(self.autostart_action)
         menu.addSeparator()
+        menu.addAction(voice_info)
         menu.addAction(quit_action)
 
         return menu

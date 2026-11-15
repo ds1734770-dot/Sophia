@@ -1,0 +1,8 @@
+# The maintainer reviews every change; safety-critical code needs extra care
+*                               @ds1734770-dot
+/app/tools/registry.py          @ds1734770-dot
+/app/file/path_guard.py         @ds1734770-dot
+/app/agent/guard.py             @ds1734770-dot
+/app/computer/shell_runner.py   @ds1734770-dot
+/install.sh                     @ds1734770-dot
+/install.ps1                    @ds1734770-dot

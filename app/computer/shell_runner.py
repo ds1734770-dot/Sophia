@@ -10,7 +10,9 @@ flagged as dangerous.
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 IS_MAC = sys.platform == "darwin"
 
@@ -74,7 +76,7 @@ class ShellBlocked(Exception):
     """
 
 
-def classify(command):
+def classify(command: str) -> str:
     """
     Returns "normal" or "dangerous"; raises ShellBlocked if refused.
     """
@@ -99,13 +101,18 @@ def classify(command):
 
 class ShellRunner:
 
-    def __init__(self, run=None, cwd=None, mac=None):
+    def __init__(
+        self,
+        run: Callable[..., Any] | None = None,
+        cwd: str | Path | None = None,
+        mac: bool | None = None,
+    ) -> None:
 
         self._run = run or subprocess.run
         self.cwd = str(cwd or Path.home())
         self.mac = IS_MAC if mac is None else mac
 
-    def _command(self, command):
+    def _command(self, command: str) -> list[str]:
 
         if self.mac:
             # -f: skip the user's startup files, like -NoProfile
@@ -121,7 +128,7 @@ class ShellRunner:
             command,
         ]
 
-    def run(self, command, timeout=DEFAULT_TIMEOUT):
+    def run(self, command: str, timeout: int | float = DEFAULT_TIMEOUT) -> tuple[bool, str]:
         """
         Returns (ok, output). Output is trimmed; a timeout stops the
         command.

@@ -5,6 +5,7 @@ security, and her own windows. Checked before every action on the screen.
 """
 
 import re
+from collections.abc import Iterable
 
 # Titles (lower case) that mark a banking or payment page
 PAYMENT_WORDS = (
@@ -53,11 +54,11 @@ class ScreenGuard:
     check_field(name, is_password) -> (allowed, reason)
     """
 
-    def __init__(self, extra_blocked=()):
+    def __init__(self, extra_blocked: Iterable[str] = ()) -> None:
 
         self.extra = tuple(w.strip().lower() for w in extra_blocked if w.strip())
 
-    def check_window(self, title, process=""):
+    def check_window(self, title: str | None, process: str | None = "") -> tuple[bool, str]:
 
         text = (title or "").strip().lower()
         process = (process or "").strip().lower()
@@ -81,7 +82,7 @@ class ScreenGuard:
 
         return True, ""
 
-    def check_field(self, name="", is_password=False):
+    def check_field(self, name: str | None = "", is_password: bool = False) -> tuple[bool, str]:
         """
         May text be typed into this field?
         """

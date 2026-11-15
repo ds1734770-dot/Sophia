@@ -28,3 +28,9 @@ summary.json
 build/
 dist/
 *.spec
+
+# Coverage and builds
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/

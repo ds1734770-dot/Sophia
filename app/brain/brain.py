@@ -24,7 +24,7 @@ from app.agent.skills import WhatsAppSkill
 from app.tools.screen_agent_tools import build_screen_agent_registry
 from app.config.settings import Settings
 from app.tools.mcp_bridge import McpBridge
-from app.tools.plugins import load_plugins
+from app.tools.plugins import TRUST_FILE, PluginTrust, load_plugins
 from app.computer.screen_control import ScreenControl
 from app.computer.ui_automation import ScreenElements
 from app.planner.reminder_service import FiredStore, RoutineStore, TimerStore
@@ -128,6 +128,9 @@ class Brain:
             self.registry,
             [DATA_DIR / "plugins", PROJECT_ROOT / "plugins"],
             services={"guard": self.guard, "data_dir": DATA_DIR},
+            # plugins you add yourself load only once you trust them
+            trust=PluginTrust(DATA_DIR / TRUST_FILE),
+            needs_trust=[DATA_DIR / "plugins"],
         )
 
         self.mcp = McpBridge(self.registry, DATA_DIR / "mcp.json")

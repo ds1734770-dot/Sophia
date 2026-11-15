@@ -1,7 +1,20 @@
 """
-Hands-free activation: listens to the microphone for a wake word
-("Hey Jarvis") with a small local model (openwakeword), and calls
-on_wake() when it hears it. Audio never leaves the computer.
+Hands-free activation: listens to the microphone for the wake phrase
+("Hey Sophia") and calls on_wake() when it hears it. Audio never leaves
+the computer.
+
+Two kinds of wake model:
+
+- "hey_sophia" (the default): SpeechWakeModel notices speech by its
+  loudness, and the local Whisper recognizer (MIT, already used for
+  requests) checks whether it said the name. Whisper base heard "Hey
+  Sophia" in every test clip and ignored "sofa", "Sophie" and "so far";
+  the small Moonshine models often return nothing for such a short clip,
+  so they are not used for this. No extra model to download, and nothing
+  with a non-commercial license.
+- an openWakeWord model by name ("hey_jarvis", "alexa", "hey_mycroft"):
+  a dedicated keyword model, with the recognizer confirming weak matches.
+  openWakeWord's pre-trained models are CC BY-NC-SA 4.0 (non-commercial).
 
 Built to keep running for as long as Sophia does:
 
@@ -35,7 +48,27 @@ RESTART_BACKOFF = (1.0, 3.0, 8.0, 20.0)
 RING_SECONDS = 4.0
 NOISE_WINDOW_BLOCKS = 150        # about 12 seconds
 
-DEFAULT_WAKE_WORD = "hey_jarvis"
+DEFAULT_WAKE_WORD = "hey_sophia"
+
+# Wake phrases spotted by speech recognition instead of a keyword model,
+# with the names the recognizer must hear
+# (both spellings Whisper writes; with SPEECH_NAME_CUTOFF only near-exact
+# words count, so "sofa" and "Sophie" do not)
+SPEECH_WAKE_WORDS = {
+    "hey_sophia": ("sophia", "sofia"),
+    "sophia": ("sophia", "sofia"),
+}
+
+# How closely a word must match one of the names: "sophia" and "sofia"
+# count, "sofa" (0.89 like "sofia") and "Sophie" (0.83) do not
+SPEECH_NAME_CUTOFF = 0.92
+
+# SpeechWakeModel: what counts as speech, and when to check it
+SPEECH_MIN_LEVEL = 0.010             # RMS of float audio; quieter is never speech
+SPEECH_OVER_NOISE = 3.0              # or this many times the room's noise
+SPEECH_MIN_SECONDS = 0.30            # shorter sounds are clicks and knocks
+SPEECH_END_SECONDS = 0.30            # this much quiet ends a phrase
+SPEECH_RECHECK_SECONDS = 1.4         # while someone keeps talking
 
 # A score at or above the threshold wakes Sophia at once. A weaker score
 # (this fraction of the threshold or more) counts when it holds for
@@ -79,10 +112,99 @@ def spoken_name(model):
     return model.replace("_", " ").title()
 
 
+def wake_names(word):
+    """
+    The words the speech recognizer must hear for this wake word.
+    """
+
+    if word in SPEECH_WAKE_WORDS:
+        return SPEECH_WAKE_WORDS[word]
+
+    return (word.split("_")[-1],)
+
+
+class SpeechWakeModel:
+    """
+    Finds moments worth checking for the wake phrase: someone started or
+    finished saying something. predict() returns {word: 1.0} at such a
+    moment and {word: 0.0} otherwise; the listener then asks the speech
+    recognizer whether the name was said (verify_only).
+    """
+
+    verify_only = True
+
+    def __init__(self, word=DEFAULT_WAKE_WORD, block_seconds=None):
+
+        self.word = word
+        self.block_seconds = block_seconds or BLOCK / SAMPLE_RATE
+
+        self.reset()
+
+    def reset(self):
+
+        self._noise = 0.004
+        self._speech = 0.0          # seconds of the current phrase
+        self._quiet = 0.0           # seconds of quiet since it
+        self._since_check = 0.0
+
+    def level_is_speech(self, level):
+
+        return level >= max(SPEECH_MIN_LEVEL, self._noise * SPEECH_OVER_NOISE)
+
+    def predict(self, chunk):
+
+        samples = np.asarray(chunk, dtype="float32")
+
+        if np.asarray(chunk).dtype == np.int16:
+            samples = samples / 32768.0
+
+        level = float(np.sqrt(np.mean(samples ** 2))) if len(samples) else 0.0
+
+        step = self.block_seconds
+        check = False
+
+        if self.level_is_speech(level):
+
+            self._speech += step
+            self._quiet = 0.0
+            self._since_check += step
+
+            # long phrase ("Hey Sophia, open YouTube"): check as it goes
+            if self._speech >= SPEECH_MIN_SECONDS * 2 and self._since_check >= SPEECH_RECHECK_SECONDS:
+                check = True
+
+        else:
+
+            # the room's noise follows the quiet parts only
+            self._noise = 0.95 * self._noise + 0.05 * level
+
+            if self._speech > 0:
+
+                self._quiet += step
+
+                if self._quiet >= SPEECH_END_SECONDS:
+
+                    # the phrase has ended: check it unless it was a click
+                    # or was just checked
+                    check = self._speech >= SPEECH_MIN_SECONDS and self._since_check >= 0.5
+
+                    self._speech = 0.0
+                    self._quiet = 0.0
+
+        if check:
+            self._since_check = 0.0
+
+        return {self.word: 1.0 if check else 0.0}
+
+
 def load_wake_model(name):
     """
-    The openwakeword model, downloading its small file on first use.
+    The wake model: the speech-based one for "hey_sophia", otherwise the
+    openWakeWord model of that name (its small file downloads on first use).
     """
+
+    if name in SPEECH_WAKE_WORDS:
+        return SpeechWakeModel(name)
 
     import glob
     import os
@@ -192,6 +314,9 @@ class WakeWordListener:
         began = time.monotonic()
 
         self._model = self._model_factory(self.word)
+
+        if getattr(self._model, "verify_only", False) and self.verifier is None:
+            raise RuntimeError(f"The wake phrase '{self.word}' needs the speech recognizer")
 
         loaded = time.monotonic()
 
@@ -444,6 +569,25 @@ class WakeWordListener:
         score = max(scores.values()) if scores else 0.0
 
         now = self._clock() if stamp is None else stamp
+
+        # speech-based wake phrase: every candidate is checked by the
+        # recognizer, and nothing wakes Sophia without that check
+        if getattr(self._model, "verify_only", False):
+
+            if (
+                score > 0
+                and not self._verifying
+                and now - self._last_wake >= COOLDOWN_SECONDS
+            ):
+
+                self._last_verify = now
+                self._verifying = True
+
+                threading.Thread(
+                    target=self._verify, args=(now, score), name="wake-verify", daemon=True
+                ).start()
+
+            return
 
         wake, self._streak = wake_decision(score, self.threshold, self._streak)
 

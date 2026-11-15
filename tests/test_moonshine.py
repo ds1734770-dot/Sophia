@@ -280,7 +280,7 @@ class Primary:
             raise RuntimeError("boom")
         return "fast"
 
-    def hears(self, audio, names):
+    def hears(self, audio, names, cutoff=0.66):
         return True
 
 
@@ -295,7 +295,7 @@ class Secondary:
     def transcribe(self, audio):
         return "whisper"
 
-    def hears(self, audio, names):
+    def hears(self, audio, names, cutoff=0.66):
         return False
 
 
@@ -414,7 +414,7 @@ class Counting:
         self.calls += 1
         return self.text
 
-    def hears(self, audio, names):
+    def hears(self, audio, names, cutoff=0.66):
         return False
 
 

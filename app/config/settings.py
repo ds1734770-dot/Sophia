@@ -21,7 +21,7 @@ DEFAULT_WHISPER_MODEL = "base.en"
 # Natural voice (Microsoft Edge neural voices; needs internet, falls back
 # to the offline Windows voice) and the hands-free wake word
 DEFAULT_TTS_VOICE = "en-IN-NeerjaNeural"
-DEFAULT_WAKE_WORD = "hey_jarvis"
+DEFAULT_WAKE_WORD = "hey_sophia"
 
 
 class Settings:

@@ -10,6 +10,8 @@ Usage:
   sophia --setup         first-run setup: API key, app scan, permissions,
                          voice models (add --yes to accept the defaults,
                          --skip-models to download them later)
+  sophia --trust-plugin FILE    allow a plugin from your plugins folder
+  sophia --untrust-plugin FILE  stop loading it
 """
 
 import sys
@@ -38,6 +40,13 @@ def main():
     if "--help" in sys.argv or "-h" in sys.argv:
         print(__doc__.strip())
         return
+
+    if "--trust-plugin" in sys.argv or "--untrust-plugin" in sys.argv:
+
+        from app.settings.paths import DATA_DIR
+        from app.tools.plugins import TRUST_FILE, PluginTrust, trust_plugin_command
+
+        sys.exit(trust_plugin_command(sys.argv, DATA_DIR / "plugins", PluginTrust(DATA_DIR / TRUST_FILE)))
 
     if "--setup" in sys.argv:
         from app.setup_wizard import run

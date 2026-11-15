@@ -447,7 +447,7 @@ def build_default_registry(
                 level = classify(args["command"])
 
             except ShellBlocked as e:
-                raise ToolBlocked(str(e))
+                raise ToolBlocked(str(e)) from e
 
             return Risk.DANGEROUS if level == "dangerous" else Risk.CONFIRM
 

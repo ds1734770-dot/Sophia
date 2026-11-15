@@ -284,29 +284,20 @@ def step_models(assume_yes, skip):
         from app.voice.moonshine import MoonshineTranscriber
 
         loaders.append(("speech recognition (Moonshine)", MoonshineTranscriber(settings.moonshine_model).preload))
-        loaders.append(("wake word check", MoonshineTranscriber("tiny").preload))
+        loaders.append(("quick check model (Moonshine tiny)", MoonshineTranscriber("tiny").preload))
 
     except Exception:
         pass
 
     from app.voice.listener import Transcriber
 
-    loaders.append(("speech recognition fallback (Whisper)", Transcriber(settings.whisper_model).preload))
+    loaders.append(("\"Hey Sophia\" and fallback recognition (Whisper)", Transcriber(settings.whisper_model).preload))
 
-    from app.voice.piper_voice import PiperEngine
+    from app.voice.piper_voice import PiperEngine, voice_credit
 
     piper = PiperEngine(settings.piper_voice, DATA_DIR / "models" / "piper")
 
-    loaders.append((f"voice ({settings.piper_voice})", piper.preload))
-
-    try:
-
-        from openwakeword.utils import download_models
-
-        loaders.append(("wake word (Hey Jarvis)", download_models))
-
-    except Exception:
-        pass
+    loaders.append((f"voice: {voice_credit(settings.piper_voice)}", piper.preload))
 
     done = True
 
@@ -374,7 +365,7 @@ def run(argv=None):
     else:
         print("    sophia            (or: python main.py)")
 
-    print(f"{DIM}Try: \"open YouTube\", \"open Chrome\", \"what's the weather\", or say \"Hey Jarvis\".{RESET}")
+    print(f"{DIM}Try: \"open YouTube\", \"open Chrome\", \"what's the weather\", or say \"Hey Sophia\".{RESET}")
 
     missing = [name for name, allowed in permissions.items() if not allowed]
 

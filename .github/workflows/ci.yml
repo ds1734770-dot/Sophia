@@ -3,7 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
+  schedule:
+    # weekly: catch newly published vulnerabilities in pinned packages
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -26,10 +33,30 @@ jobs:
       - name: Install
         run: pip install -r requirements-dev.txt
 
-      - name: Lint (errors only)
-        run: ruff check --select F app main.py tests
+      - name: Lint
+        run: ruff check app main.py tests scripts
 
-      - name: Test
-        run: pytest -q
+      - name: Type check (safety-critical modules)
+        run: mypy
+
+      - name: Test with coverage
+        run: pytest -q --cov --cov-report=term --cov-report=xml
         env:
           QT_QPA_PLATFORM: offscreen
+
+      - name: Licenses
+        run: python scripts/licenses.py --check
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Known vulnerabilities in pinned packages
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --disable-pip --no-deps

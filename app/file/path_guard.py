@@ -11,6 +11,7 @@ in Windows itself, installed programs, AppData, or Sophia's own folder.
 
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 IS_MAC = sys.platform == "darwin"
@@ -55,7 +56,7 @@ MAC_SYSTEM_DIRS = [
 ]
 
 
-def default_system_dirs():
+def default_system_dirs() -> list[Path]:
 
     if IS_MAC:
         return [Path(d) for d in MAC_SYSTEM_DIRS]
@@ -77,7 +78,12 @@ def default_system_dirs():
 
 class PathGuard:
 
-    def __init__(self, home=None, system_dirs=None, protected=None):
+    def __init__(
+        self,
+        home: str | Path | None = None,
+        system_dirs: Iterable[str | Path] | None = None,
+        protected: Iterable[str | Path] | None = None,
+    ) -> None:
 
         self.home = Path(home) if home else Path.home()
 
@@ -105,7 +111,7 @@ class PathGuard:
     # ------------------------------------------------
 
     @staticmethod
-    def _resolve(path):
+    def _resolve(path: str | Path) -> Path | None:
 
         try:
             return Path(path).expanduser().resolve()
@@ -114,7 +120,7 @@ class PathGuard:
             return None
 
     @staticmethod
-    def _within(path, folder):
+    def _within(path: Path, folder: Path) -> bool:
 
         try:
             folder = folder.resolve()
@@ -124,7 +130,7 @@ class PathGuard:
 
         return path == folder or folder in path.parents
 
-    def is_secret(self, path):
+    def is_secret(self, path: Path) -> bool:
 
         parts = {p.lower() for p in path.parts}
 
@@ -135,13 +141,13 @@ class PathGuard:
 
         return name in SECRET_NAMES or path.suffix.lower() in SECRET_SUFFIXES
 
-    def is_junk(self, path):
+    def is_junk(self, path: Path) -> bool:
 
         return bool({p.lower() for p in path.parts} & JUNK_DIRS)
 
     # ------------------------------------------------
 
-    def for_read(self, path):
+    def for_read(self, path: str | Path) -> Path | None:
         """
         The resolved Path if Sophia may read it, else None.
         """
@@ -153,7 +159,7 @@ class PathGuard:
 
         return resolved
 
-    def for_write(self, path):
+    def for_write(self, path: str | Path) -> Path | None:
         """
         The resolved Path if Sophia may change it, else None.
         """
@@ -174,7 +180,7 @@ class PathGuard:
 
         return resolved
 
-    def _user_file(self, resolved, folder):
+    def _user_file(self, resolved: Path, folder: Path) -> bool:
         """
         True for cloud-drive files that only look like app data.
         """
@@ -183,7 +189,7 @@ class PathGuard:
             self._within(resolved, f) for f in self.user_files_in_app_data
         )
 
-    def why_not_write(self, path):
+    def why_not_write(self, path: str | Path) -> str:
         """
         A short reason a path is off limits, for error messages.
         """
@@ -215,7 +221,7 @@ class PathGuard:
         return "That location is not allowed."
 
 
-def allowed_roots(home=None):
+def allowed_roots(home: str | Path | None = None) -> list[Path]:
     """
     The everyday folders, for names like "Desktop" or "Documents".
     """
@@ -225,7 +231,7 @@ def allowed_roots(home=None):
     return [home / "Desktop", home / "Documents", home / "Downloads"]
 
 
-def is_safe_name(name):
+def is_safe_name(name: str) -> bool:
     """
     A plain file or folder name: no separators, no parent references.
     """

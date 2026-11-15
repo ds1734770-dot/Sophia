@@ -1,8 +1,9 @@
 # Sophia installer for Windows 10/11 (PowerShell).
 #
-#   irm https://raw.githubusercontent.com/ds1734770-dot/Sophia/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/ds1734770-dot/Sophia/v0.3.0/install.ps1 | iex
 #
-# Puts Sophia in %USERPROFILE%\Sophia ($env:SOPHIA_DIR to change), Python
+# Installs release v0.3.0 ($env:SOPHIA_VERSION to choose another tag, or
+# "main" for the latest code). Puts Sophia in %USERPROFILE%\Sophia ($env:SOPHIA_DIR to change), Python
 # 3.12 and its packages in %USERPROFILE%\.venvs\sophia, adds a `sophia`
 # command, then runs the first-run setup (API key, app scan, microphone
 # check, voice models). No administrator rights needed.
@@ -10,29 +11,31 @@
 $ErrorActionPreference = "Stop"
 
 $Repo   = if ($env:SOPHIA_REPO)   { $env:SOPHIA_REPO }   else { "https://github.com/ds1734770-dot/Sophia" }
-$Branch = if ($env:SOPHIA_BRANCH) { $env:SOPHIA_BRANCH } else { "main" }
+$Version = if ($env:SOPHIA_VERSION) { $env:SOPHIA_VERSION } else { "v0.3.0" }
 $Dir    = if ($env:SOPHIA_DIR)    { $env:SOPHIA_DIR }    else { Join-Path $HOME "Sophia" }
 $Venv   = if ($env:SOPHIA_VENV)   { $env:SOPHIA_VENV }   else { Join-Path $HOME ".venvs\sophia" }
 $Bin    = Join-Path $HOME ".local\bin"
 
-Write-Host "Installing Sophia into $Dir" -ForegroundColor Cyan
+Write-Host "Installing Sophia $Version into $Dir" -ForegroundColor Cyan
 
 # 1. The code
 if (Test-Path (Join-Path $Dir ".git")) {
-    Write-Host "Updating the existing copy..."
-    git -C $Dir pull --ff-only
+    Write-Host "Updating the existing copy to $Version..."
+    git -C $Dir fetch --depth 1 origin $Version
+    git -C $Dir checkout --quiet FETCH_HEAD
 }
 elseif ((Test-Path $Dir) -and (Get-ChildItem $Dir -Force | Select-Object -First 1)) {
     throw "$Dir already exists and is not a Sophia checkout. Set `$env:SOPHIA_DIR to another folder."
 }
 elseif (Get-Command git -ErrorAction SilentlyContinue) {
-    git clone --depth 1 --branch $Branch "$Repo.git" $Dir
+    git clone --quiet --depth 1 --branch $Version "$Repo.git" $Dir
 }
 else {
     # no git: download the code as a zip
     $zip = Join-Path $env:TEMP "sophia.zip"
     $tmp = Join-Path $env:TEMP "sophia-src"
-    Invoke-WebRequest "$Repo/archive/refs/heads/$Branch.zip" -OutFile $zip
+    $kind = if ($Version.StartsWith("v")) { "tags" } else { "heads" }
+    Invoke-WebRequest "$Repo/archive/refs/$kind/$Version.zip" -OutFile $zip
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     Expand-Archive $zip -DestinationPath $tmp
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
