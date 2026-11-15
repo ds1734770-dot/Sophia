@@ -1,7 +1,6 @@
 """
-The armoured hero: a red and gold metallic powered suit with a glowing
-arc reactor, drawn in code (an original design inspired by the comic-book
-armoured hero, not official artwork). It uses the car's state machine, so
+The armored suit: a red and gold metallic powered suit with a glowing
+chest core, drawn in code (an original design). It uses the car's state machine, so
 everything Sophia does shows up in it too:
 
     idle        hovers on its boot thrusters, eyes and reactor glow softly
