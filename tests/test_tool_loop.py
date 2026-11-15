@@ -199,7 +199,6 @@ def test_thinking_setting_is_dropped_when_a_model_rejects_it(monkeypatch):
 
 def test_read_only_calls_run_together_and_in_order(monkeypatch):
 
-    import threading
     import time as _time
 
     from app.brain.gemini_client import GeminiClient

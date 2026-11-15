@@ -52,7 +52,7 @@ STEPS = {
     "create_folder": ("📁", "Creating folder {name}"),
     "open_file": ("📄", "Opening {path}"),
     "launch_program": ("🚀", "Launching {path}"),
-    "run_powershell": ("⌨", "Running a PowerShell command"),
+    "run_powershell": ("⌨", "Running a shell command"),
     "look_at_screen": ("👁", "Looking at your screen"),
     "take_screenshot": ("📸", "Taking a screenshot"),
     "list_screen_elements": ("🧭", "Reading the window's controls"),

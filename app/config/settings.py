@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import sys
 
 from app.config.secrets import get_stored_api_key
 
@@ -68,7 +69,11 @@ class Settings:
         self.neural_voice = (os.getenv("NEURAL_VOICE") or "true").lower() not in ("0", "false", "no")
         self.wake_word = os.getenv("WAKE_WORD") or DEFAULT_WAKE_WORD
         self.wake_threshold = float(os.getenv("WAKE_THRESHOLD") or 0.5)
-        self.hide_hotkey = os.getenv("HIDE_HOTKEY") or "alt+s"
+        # macOS refuses global shortcuts that use only Option, so the Mac
+        # default is Ctrl+Option+H
+        self.hide_hotkey = os.getenv("HIDE_HOTKEY") or (
+            "ctrl+alt+h" if sys.platform == "darwin" else "alt+s"
+        )
 
         # stops a screen task at once, from anywhere
         self.stop_hotkey = os.getenv("STOP_HOTKEY") or "ctrl+alt+x"

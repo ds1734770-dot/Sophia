@@ -2,8 +2,6 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import threading
-import time
 from types import SimpleNamespace
 
 import pytest
@@ -624,7 +622,7 @@ def screen_tool_registry(autonomy):
 
     registry = ToolRegistry()
 
-    elements = FakeElements([WHATSAPP])
+    FakeElements([WHATSAPP])
     screen = SimpleNamespace(
         click_on=lambda target, **k: (True, "clicked"), type_text=lambda t, e=False: (True, "typed"),
         press_keys=lambda k: (True, "pressed"), scroll=lambda d, a=5: (True, "scrolled"),
@@ -851,7 +849,7 @@ def test_the_overlay_draws_and_lets_the_mouse_through():
 
 def test_the_window_shows_the_border_and_stop_while_a_task_runs():
 
-    from tests.test_ui import FakeAutostart, FakeSophia, make_window, pump
+    from tests.test_ui import FakeSophia, make_window, pump
     from tests.test_ui import qapp  # noqa: F401
 
     from PySide6.QtWidgets import QApplication

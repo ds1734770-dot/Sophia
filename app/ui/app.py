@@ -156,7 +156,8 @@ def run_gui(voice=True, minimized=False, orb_mode=True):
 
         from app.voice.listener import Recorder, Transcriber
         from app.voice.neural_voice import EdgeBackend
-        from app.voice.speaker import SapiBackend, Speaker
+        from app.voice.speaker import Speaker
+        from app.voice.speaker import SystemBackend as SapiBackend
         from app.voice.wakeword import WakeWordListener
 
         if settings.tts_engine == "piper":

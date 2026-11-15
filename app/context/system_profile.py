@@ -6,10 +6,12 @@ everyday folders, the installed programs and what is open right now.
 """
 
 import getpass
-import os
 import platform
+import sys
 import time
 from pathlib import Path
+
+IS_MAC = sys.platform == "darwin"
 
 try:
     import win32gui
@@ -30,7 +32,11 @@ def known_folders(home=None):
 
     found = []
 
-    for name in ("Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos"):
+    names = ("Desktop", "Documents", "Downloads", "Pictures", "Music", "Movies") if IS_MAC else (
+        "Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos"
+    )
+
+    for name in names:
 
         # OneDrive may hold the real folder
         for base in (home / "OneDrive", home):
@@ -61,6 +67,17 @@ def open_windows():
     Titles of the visible windows (the programs the user has open).
     """
 
+    if IS_MAC:
+
+        try:
+
+            from app.computer.macos import open_window_titles
+
+            return open_window_titles(MAX_WINDOWS)
+
+        except Exception:
+            return []
+
     if win32gui is None:
         return []
 
@@ -88,8 +105,13 @@ def open_windows():
 def build_static(applications, home=None):
 
     lines = [
-        f"Computer: {platform.node()}, {platform.system()} {platform.release()}, "
-        f"Windows user '{getpass.getuser()}'.",
+        (
+            f"Computer: {platform.node()}, macOS {platform.mac_ver()[0]}, "
+            f"user '{getpass.getuser()}'."
+        ) if IS_MAC else (
+            f"Computer: {platform.node()}, {platform.system()} {platform.release()}, "
+            f"Windows user '{getpass.getuser()}'."
+        ),
         "Everyday folders: " + "; ".join(known_folders(home)) + ".",
     ]
 

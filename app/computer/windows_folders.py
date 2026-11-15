@@ -1,11 +1,21 @@
 from pathlib import Path
-import winreg
+
+try:
+    import winreg
+except ImportError:  # not on Windows
+    winreg = None
 
 
 class WindowsFolders:
 
     @staticmethod
     def get_folder(name):
+
+        if winreg is None:
+
+            from app.computer.macos import get_folder
+
+            return get_folder(name)
 
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,

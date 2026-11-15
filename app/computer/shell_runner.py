@@ -1,5 +1,6 @@
 """
-Runs PowerShell commands for the assistant.
+Runs shell commands for the assistant: PowerShell on Windows, zsh on
+macOS.
 
 Every command is shown to the user and confirmed first (see the tool
 tiers). On top of that, some commands are refused outright and some are
@@ -8,7 +9,12 @@ flagged as dangerous.
 
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+IS_MAC = sys.platform == "darwin"
+
+SHELL_NAME = "Terminal (zsh)" if IS_MAC else "PowerShell"
 
 MAX_OUTPUT_CHARS = 4000
 DEFAULT_TIMEOUT = 30
@@ -29,6 +35,20 @@ BLOCKED = [
     (r"vssadmin\s+delete|wevtutil\s+cl", "deleting backups or logs"),
 ]
 
+# macOS / Unix equivalents (checked on every system: harmless where
+# they cannot run)
+BLOCKED += [
+    (r"(curl|wget)\b[^|;]*\|\s*(sudo\s+)?((ba|z|da|k)?sh|python3?|perl|ruby|osascript)\b", "downloading and running code"),
+    (r"\bbase64\b[^|]*-d[^|]*\|\s*(ba|z)?sh\b|\beval\s+\"?\$\(", "running hidden code"),
+    (r"\bsudo\b|\bsu\s+-?\s*\w*$|\bdoas\b", "administrator rights"),
+    (r"\bcsrutil\b|\bspctl\s+--master-disable|\bspctl\s+--global-disable|\bfdesetup\b", "weakening the Mac's protection"),
+    (r"\bdiskutil\s+(erase|zero|secureerase|partition|apfs\s+delete)|\bnewfs_|\bdd\s+if=", "disk changes"),
+    (r"\bdscl\b|\bsysadminctl\b|\bdseditgroup\b", "changing user accounts"),
+    (r"\btmutil\s+(delete|disable)|\blog\s+erase\b", "deleting backups or logs"),
+    (r"\brm\s+-[a-z]*r[a-z]*f?\s+(/|~|\$home)\s*($|;|&)", "deleting everything"),
+    (r"\bsecurity\s+(find|dump|delete)-[\w-]*(password|keychain|certificate)", "reading saved passwords"),
+]
+
 # Allowed, but shown with a warning
 DANGEROUS = [
     r"\bremove-item\b|\bdel\b|\berase\b|\brd\b|\brmdir\b|\brm\b",
@@ -40,6 +60,11 @@ DANGEROUS = [
     r"\bset-itemproperty\b|\bnew-itemproperty\b|\bremove-itemproperty\b",
     r"\bstop-service\b|\bset-service\b|\bdisable-\w+",
     r"\bnetsh\b|\bset-netfirewallrule\b|\bnew-netfirewallrule\b",
+    r"\bkillall\b|\bpkill\b|\blaunchctl\b|\bhalt\b|\breboot\b|\bpmset\s+(?!-g\b)",
+    r"\bdefaults\s+(write|delete)\b|\bchmod\b|\bchown\b|\bchflags\b|\bxattr\s+-[a-z]*[dc]",
+    r"\bcp\b|\bln\b|\btouch\b|\bmkdir\b|\btee\b|\bsed\s+-i\b|\btruncate\b",
+    r"\bbrew\s+(uninstall|remove|install|upgrade)\b|\bpip3?\s+(install|uninstall)\b|\bnpm\s+(i|install|uninstall)\b",
+    r"\bnetworksetup\b|\bscutil\s+--set\b|\bsystemsetup\b|\bosascript\b",
 ]
 
 
@@ -61,7 +86,7 @@ def classify(command):
         if re.search(pattern, text):
             raise ShellBlocked(
                 f"I won't run that: it involves {reason}. "
-                "If you really need it, run it yourself in PowerShell."
+                f"If you really need it, run it yourself in {'Terminal' if IS_MAC else 'PowerShell'}."
             )
 
     for pattern in DANGEROUS:
@@ -74,10 +99,27 @@ def classify(command):
 
 class ShellRunner:
 
-    def __init__(self, run=None, cwd=None):
+    def __init__(self, run=None, cwd=None, mac=None):
 
         self._run = run or subprocess.run
         self.cwd = str(cwd or Path.home())
+        self.mac = IS_MAC if mac is None else mac
+
+    def _command(self, command):
+
+        if self.mac:
+            # -f: skip the user's startup files, like -NoProfile
+            return ["/bin/zsh", "-f", "-c", command]
+
+        return [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            command,
+        ]
 
     def run(self, command, timeout=DEFAULT_TIMEOUT):
         """
@@ -90,15 +132,8 @@ class ShellRunner:
         try:
 
             result = self._run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    command,
-                ],
+                self._command(command),
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=timeout,

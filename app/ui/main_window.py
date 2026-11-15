@@ -1,6 +1,7 @@
 import logging
 import math
 import re
+import sys
 import time
 
 from PySide6.QtCore import (
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.computer.autostart import Autostart
+from app.computer.autostart import default_autostart
 from app.ui.car import CarModel, CarWidget, draw_car
 from app.ui.characters import CHARACTERS, make_model, valid
 from app.ui.activity import describe_step
@@ -121,6 +122,18 @@ def _default_beep():
     """
 
     try:
+
+        if sys.platform == "darwin":
+
+            import subprocess
+
+            subprocess.Popen(
+                ["afplay", "-v", "0.4", "/System/Library/Sounds/Tink.aiff"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            return
 
         import winsound
 
@@ -316,7 +329,7 @@ class MainWindow(QMainWindow):
         self.recorder_factory = recorder_factory
         self.transcriber = transcriber
         self.settings = settings or QSettings("Sophia", "Sophia")
-        self.autostart = autostart or Autostart()
+        self.autostart = autostart or default_autostart()
         self.wake_factory = wake_factory
         self.agent_hub = agent_hub
         self._has_car = False
@@ -569,7 +582,9 @@ class MainWindow(QMainWindow):
         )
         self.screen_confirm_action.toggled.connect(self._set_screen_confirm)
 
-        self.autostart_action = QAction("Start with Windows", self)
+        self.autostart_action = QAction(
+            "Open at login" if sys.platform == "darwin" else "Start with Windows", self
+        )
         self.autostart_action.setCheckable(True)
         self.autostart_action.setChecked(self.autostart.is_enabled())
         self.autostart_action.toggled.connect(self.autostart.set_enabled)

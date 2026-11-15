@@ -1,6 +1,8 @@
 import os
+import sys
 import ctypes
 from app.computer.explorer_window_manager import ExplorerWindowManager
+from app.computer.macos import IS_MAC, open_path
 from app.computer.windows_system_manager import WindowsSystemManager
 from app.computer.application_manager import ApplicationManager
 from app.computer.application_discovery.shortcut_resolver import ShortcutResolver
@@ -16,7 +18,18 @@ class ComputerManager:
         self.app_manager = ApplicationManager()
         self.window_manager = WindowManager()
 
-    APPS = {
+    MAC_APPS = {
+        "chrome": {"path": "/Applications/Google Chrome.app", "process": "Google Chrome"},
+        "vscode": {"path": "/Applications/Visual Studio Code.app", "process": "Code"},
+        "notepad": {"path": "/System/Applications/TextEdit.app", "process": "TextEdit"},
+        "textedit": {"path": "/System/Applications/TextEdit.app", "process": "TextEdit"},
+        "safari": {"path": "/Applications/Safari.app", "process": "Safari"},
+        "terminal": {"path": "/System/Applications/Utilities/Terminal.app", "process": "Terminal"},
+        "cmd": {"path": "/System/Applications/Utilities/Terminal.app", "process": "Terminal"},
+        "powershell": {"path": "/System/Applications/Utilities/Terminal.app", "process": "Terminal"},
+    }
+
+    APPS = MAC_APPS if IS_MAC else {
         "chrome": {
             "path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             "process": "chrome.exe",
@@ -147,7 +160,7 @@ class ComputerManager:
             path = folder_name.strip().strip('"')
 
             try:
-                os.startfile(path)
+                open_path(path)
                 return True, f"Opening {path}..."
 
             except Exception as e:
@@ -161,7 +174,7 @@ class ComputerManager:
             return False, f"I don't know the folder '{folder_name}'."
 
         try:
-            os.startfile(path)
+            open_path(path)
             return True, f"Opening {folder_name.title()}..."
 
         except Exception as e:
@@ -191,7 +204,14 @@ class ComputerManager:
 
         try:
 
-            ctypes.windll.user32.LockWorkStation()
+            if sys.platform == "darwin":
+
+                from app.computer.macos import lock_screen
+
+                lock_screen()
+
+            else:
+                ctypes.windll.user32.LockWorkStation()
 
             return True, "Locking computer..."
 

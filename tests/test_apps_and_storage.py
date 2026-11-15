@@ -1,3 +1,4 @@
+import sys
 from app.brain.engines.computer_engine import ComputerEngine
 from app.computer.builtin_apps import merge_builtin
 from app.computer.search.application_ranker import ApplicationRanker
@@ -22,7 +23,10 @@ def best(query):
 
 def test_notepad_and_calculator_are_found():
 
-    for query, name in [("notepad", "Notepad"), ("calc", "Calculator"), ("calculator", "Calculator")]:
+    # on a Mac "notepad" means TextEdit
+    notepad = "TextEdit" if sys.platform == "darwin" else "Notepad"
+
+    for query, name in [("notepad", notepad), ("calc", "Calculator"), ("calculator", "Calculator")]:
 
         matches, confident = best(query)
 

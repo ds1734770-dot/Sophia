@@ -1,3 +1,5 @@
+import sys
+
 from app.computer.application_refresh_result import ApplicationRefreshResult
 
 from app.computer.application_discovery.fingerprint_manager import FingerprintManager
@@ -23,6 +25,19 @@ class ApplicationRefreshManager:
     def refresh(self):
 
         result = ApplicationRefreshResult()
+
+        # macOS has no Start Menu or registry: the .app bundles are the
+        # whole list (kept in the start_menu slot)
+        if sys.platform == "darwin":
+
+            from app.computer.application_discovery.mac_app_scanner import MacAppScanner
+
+            result.start_menu = MacAppScanner().scan()
+
+            if self.fingerprint.changed("start_menu", result.start_menu):
+                result.changed = True
+
+            return result
 
         # -------------------------
         # Start Menu

@@ -2,7 +2,6 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import pytest
 from PySide6.QtGui import QColor
 
 from app.agents.hub import AgentHub
@@ -202,7 +201,7 @@ def test_yes_no_detection():
 
 def test_the_panel_lists_tasks_by_urgency_and_hides_when_empty():
 
-    app = qapp()
+    qapp()
 
     hub = AgentHub()
     panel = AgentsPanel(hub)
@@ -217,7 +216,7 @@ def test_the_panel_lists_tasks_by_urgency_and_hides_when_empty():
 
     panel.refresh()
 
-    order = list(panel.rows)
+    list(panel.rows)
 
     assert not panel.isHidden()
     assert panel.rows["n"].ask.isHidden() is False
@@ -227,7 +226,7 @@ def test_the_panel_lists_tasks_by_urgency_and_hides_when_empty():
 
 def test_at_most_four_cards_with_a_more_count():
 
-    app = qapp()
+    qapp()
 
     hub = AgentHub()
     panel = AgentsPanel(hub)

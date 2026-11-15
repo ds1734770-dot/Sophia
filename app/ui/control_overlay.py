@@ -6,6 +6,7 @@ also possible with the global hotkey or by throwing the mouse into a
 screen corner.
 """
 
+import sys
 import math
 import time
 
@@ -111,7 +112,7 @@ class ControlOverlay(QWidget):
         # the status pill, top centre
         text = f"Sophia is working: {self.goal[:70]}   ·   Stop: {self.hotkey_label}"
 
-        font = QFont("Segoe UI", 10)
+        font = QFont("Helvetica Neue" if sys.platform == "darwin" else "Segoe UI", 10)
         font.setBold(True)
 
         painter.setFont(font)

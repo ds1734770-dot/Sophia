@@ -7,6 +7,7 @@ index is unavailable it falls back to walking the user's folders.
 
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -72,7 +73,19 @@ class FileSearch:
     def __init__(self, guard, index_query=None, home=None):
 
         self.guard = guard
-        self.index_query = index_query or windows_index_query
+
+        if index_query is None:
+
+            if sys.platform == "darwin":
+
+                from app.computer.macos import spotlight_query
+
+                index_query = spotlight_query
+
+            else:
+                index_query = windows_index_query
+
+        self.index_query = index_query
         self.home = Path(home) if home else Path.home()
 
     # ------------------------------------------------
@@ -152,7 +165,7 @@ class FileSearch:
 
                 dirs[:] = [
                     d for d in dirs
-                    if d.lower() not in {"appdata", "node_modules", ".git", "site-packages", "__pycache__"}
+                    if d.lower() not in {"appdata", "library", "node_modules", ".git", "site-packages", "__pycache__", ".trash"}
                 ]
 
                 for name in dirs + files:

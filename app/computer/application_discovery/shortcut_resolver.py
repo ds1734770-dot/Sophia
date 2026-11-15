@@ -1,11 +1,13 @@
-import win32com.client
-
-
 class ShortcutResolver:
+    """
+    What a Windows .lnk shortcut points at. Returns None elsewhere.
+    """
 
     def resolve(self, shortcut_path):
 
         try:
+
+            import win32com.client
 
             shell = win32com.client.Dispatch("WScript.Shell")
 

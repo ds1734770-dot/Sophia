@@ -6,6 +6,8 @@ The look follows the yellow car: near-black surfaces with a warm amber
 accent, soft borders, and cards for what the assistant is doing.
 """
 
+import sys
+
 BG = "#0b0d12"
 PANEL = "#10131a"
 SURFACE = "#151922"
@@ -23,11 +25,17 @@ BOT_BUBBLE = SURFACE
 DANGER = "#ff6b6b"
 OK = "#3ddc97"
 
+# the system's own interface font (Segoe UI is not on a Mac)
+FONT_FAMILY = (
+    '"Helvetica Neue", sans-serif' if sys.platform == "darwin"
+    else '"Segoe UI Variable Text", "Segoe UI", sans-serif'
+)
+
 STYLE = f"""
 QWidget {{
     background: {BG};
     color: {TEXT};
-    font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    font-family: {FONT_FAMILY};
     font-size: 14px;
 }}
 

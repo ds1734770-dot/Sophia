@@ -1,8 +1,56 @@
 # Sophia
 
-A personal AI assistant that lives on your Windows PC. Talk or type to it; it answers with Google Gemini and works on your computer: it opens apps, searches the web and reads pages, finds and manages files anywhere on the PC, runs PowerShell, controls the screen, sets reminders and routines, and talks back.
+**A personal AI assistant that lives on your computer.** Talk or type to it and it gets things done: opens any app or website, searches the web, finds and manages your files, controls your screen, sets reminders and routines, and talks back. Runs on **macOS** and **Windows**, powered by Google Gemini (free API key).
 
-> Status: v0.2, Windows only for now.
+[![CI](https://github.com/ds1734770-dot/Sophia/actions/workflows/ci.yml/badge.svg)](https://github.com/ds1734770-dot/Sophia/actions/workflows/ci.yml)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+> "Open YouTube" · "Open Chrome" · "Find my resume and summarize it" · "Remind me at 6pm" · "Hey Jarvis, play lofi" · "What's using my memory?"
+
+## Quick start
+
+**1. Install** (one line in Terminal, no admin rights needed):
+
+macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ds1734770-dot/Sophia/main/install.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/ds1734770-dot/Sophia/main/install.ps1 | iex
+```
+
+**2. The setup runs by itself** right after installing (run it again any time with `sophia --setup`). It:
+
+1. asks for your **Gemini API key** (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)) and stores it in the Keychain / Windows Credential Manager, never in a file;
+2. **scans every app installed on your computer**, so "open Chrome", "open Spotify" or "open VS Code" work straight away;
+3. asks for the **permissions** voice and screen control need (microphone, accessibility, screen recording) and checks each one;
+4. downloads the **offline voice models** (about 500 MB, once);
+5. optionally starts Sophia **at login**.
+
+**3. Start it:**
+
+```bash
+sophia
+```
+
+A small yellow car drives onto your screen. Hover over it for **Voice**, **Chat** and **Hide**, or just say **"Hey Jarvis"**.
+
+| Command | What it does |
+| --- | --- |
+| `sophia` | the floating car (default) |
+| `sophia --chat` | the chat window instead |
+| `sophia --cli` | text only, in the terminal |
+| `sophia --no-voice` | no microphone or spoken replies |
+| `sophia --setup` | first-run setup again (API key, app scan, permissions, voice models) |
+| `sophia --help` | all options |
+
+Requirements: macOS 13+ (Apple silicon or Intel) or Windows 10/11, about 2 GB of disk space, a microphone for voice. The installer brings its own Python 3.12.
 
 ## What it can do
 
@@ -12,8 +60,8 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 | Web | "Who won the match last night?" (searches the web), "Summarize this article: <link>", "Weather in Vizag" |
 | Apps and windows | "Open VS Code", "Open YouTube", "Close Spotify", "Minimize Chrome" |
 | Files, whole PC | "Find my resume", "Summarize that PDF", "Move it to Documents", "Undo that" |
-| Shell | "How much free space do I have?", "What is using port 3000?" (shows the exact PowerShell command first) |
-| Screen control | "Click the Send button", "Type my email in the search box" (reads the window's controls through Windows accessibility for exact, fast clicks; falls back to looking at the screen) |
+| Shell | "How much free space do I have?", "What is using port 3000?" (shows the exact PowerShell or zsh command first) |
+| Screen control | "Click the Send button", "Type my email in the search box" (reads the window's controls through the system's accessibility API for exact, fast clicks; falls back to looking at the screen) |
 | Screen questions | "What error is on my screen?" |
 | Reminders and routines | "Remind me at 6pm", "Timer for 10 minutes", "Every weekday at 8 give me a morning briefing" |
 | Notes and to-dos | "Add a to-do: finish report", "Note that the exam is on Monday" |
@@ -30,14 +78,14 @@ A personal AI assistant that lives on your Windows PC. Talk or type to it; it an
 Sophia is a yellow sports car that lives on your screen (an original design, no manufacturer badge). Start it from the command line:
 
 ```powershell
-python main.py            # the car
-python main.py --chat     # classic chat window instead
+sophia            # the car
+sophia --chat     # classic chat window instead
 ```
 
 - **It drives in** from the nearest screen edge when Sophia starts, and drives off again when you hide it or quit.
 - **Drag it** anywhere, like any window. The wheels turn and the car faces the way you move it; it parks facing the middle of the screen.
 - **Hover over it** and the headlights come on, the engine revs, and three buttons appear below: **Voice** (listen, then answer aloud), **Chat** (open the full chat beside the car) and **Hide** (drive off).
-- **Alt+S** hides the car or brings it back (change it with `HIDE_HOTKEY`, for example `ctrl+alt+o`). The tray icon does the same.
+- **Alt+S** (Mac: **Ctrl+Option+H**) hides the car or brings it back (change it with `HIDE_HOTKEY`, for example `ctrl+alt+o`). The tray icon does the same.
 - **Answers** appear as a small text card above the car and are spoken. Questions get Yes / No / Always allow buttons on the card.
 - The car shows what Sophia is doing: bright cool headlights that follow your voice while listening, blinking hazard lights while thinking, brake lights glowing while speaking, a headlight flash and sparkles when a task is done, a shudder on an error.
 - **It is small on purpose** (130 px wide) with three tiny buttons that show their name as a tooltip. Right-click > Size picks Tiny, Small, Medium or Large, or set `CAR_WIDTH` (70 to 300).
@@ -52,7 +100,7 @@ Sophia can launch any program on your PC (she shows the path, whether it is sign
 ## Speed and screen control
 
 - **Answers stream.** Text appears as Gemini writes it and is spoken sentence by sentence, instead of everything arriving at the end.
-- **Controls are read, not guessed.** For "click Send" or "type in the search box" Sophia reads the window's buttons, menus, tabs and text boxes through Windows UI Automation (about half a second, no AI request, usually no mouse movement), and only looks at a screenshot for things that are not real controls (web page content, images). Password boxes are never typed into, and Sophia's own windows are never driven.
+- **Controls are read, not guessed.** For "click Send" or "type in the search box" Sophia reads the window's buttons, menus, tabs and text boxes through Windows UI Automation or the macOS Accessibility API (about half a second, no AI request, usually no mouse movement), and only looks at a screenshot for things that are not real controls (web page content, images). Password boxes are never typed into, and Sophia's own windows are never driven.
 - **She knows your PC up front:** your folders, installed programs and open windows are part of every request, so she does not have to search for them.
 
 ## Appearance
@@ -85,54 +133,80 @@ Sophia can operate whatever is on your screen, the way a person would, in three 
 
 ## How it decides what to do
 
-Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run PowerShell, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. Exact commands ("open notepad", "what time is it", "12*(5+8)", "volume to 30", "pause", "timer for 10 minutes", "weather", "battery", "convert 5 miles to km", "define word") are answered locally in a fraction of a second without using any AI quota; anything vague goes to Gemini. Gemini replies are faster too: one shared connection, a low thinking level (`THINKING_LEVEL`), and several lookups at once when it asks for them together.
+Gemini decides. Sophia gives it a set of tools (open app, search the web, read a file, run a shell command, click on the screen, and so on) and it chooses which to call, chaining several when a task needs it. Exact commands ("open notepad", "what time is it", "12*(5+8)", "volume to 30", "pause", "timer for 10 minutes", "weather", "battery", "convert 5 miles to km", "define word") are answered locally in a fraction of a second without using any AI quota; anything vague goes to Gemini. Gemini replies are faster too: one shared connection, a low thinking level (`THINKING_LEVEL`), and several lookups at once when it asks for them together.
 
 ## Safety
 
 Every action goes through one registry with three tiers:
 
 - **Runs immediately:** reading and low-risk actions (open an app, search the web, find or read files, check status).
-- **Asks first:** closing apps, writing, renaming, moving or copying files, clicking and typing on the screen, looking at your screen, running PowerShell. Answer **Yes**, **No**, or **Always allow** to stop asking for that kind of action until Sophia restarts. PowerShell can never be "always allowed".
-- **Asks with a warning:** deleting files (they go to the Recycle Bin), shutdown or restart (30 second countdown), PowerShell commands that change things, adding integrations.
+- **Asks first:** closing apps, writing, renaming, moving or copying files, clicking and typing on the screen, looking at your screen, running shell commands. Answer **Yes**, **No**, or **Always allow** to stop asking for that kind of action until Sophia restarts. PowerShell can never be "always allowed".
+- **Asks with a warning:** deleting files (they go to the Recycle Bin or Trash), shutdown or restart (30 second countdown), shell commands that change things, adding integrations.
 
 Rules that apply on top:
 
 - Files can be read anywhere except secrets (SSH keys, saved passwords, browser cookies). They can be changed anywhere in your own files, but never in Windows, Program Files, AppData or Sophia's own folder. Programs and scripts are never opened or created.
-- PowerShell commands that download and run code, hide commands, or weaken protection are refused outright.
+- Shell commands that download and run code, hide commands, need administrator rights (sudo) or weaken protection are refused outright.
 - Web pages, files, clipboard text and tool output are treated as data, never as instructions.
-- Every action is written to `data/logs/actions.jsonl`. File changes made this session can be undone.
-- Your API key lives in Windows Credential Manager, not in a file.
+- Every action is written to `logs/actions.jsonl` in your data folder. File changes made this session can be undone.
+- Your API key lives in the macOS Keychain or Windows Credential Manager, not in a file.
 
-## Install (development)
+## Install in detail
 
-Requires Windows 10/11 and Python 3.12.
+### What the installer does
 
-```powershell
+| | macOS | Windows |
+| --- | --- | --- |
+| Code | `~/Sophia` (`SOPHIA_DIR` to change) | `%USERPROFILE%\Sophia` |
+| Python 3.12 + packages | `~/.venvs/sophia`, through [uv](https://github.com/astral-sh/uv) | `%USERPROFILE%\.venvs\sophia` |
+| `sophia` command | `~/.local/bin/sophia` | `%USERPROFILE%\.local\bin\sophia.cmd` |
+| Your data (history, notes, logs) | `~/Library/Application Support/Sophia` | `data\` in the code folder |
+
+Nothing outside your home folder changes. Run the installer again to **update**. To **uninstall**, delete those folders (and, on a Mac, `~/Library/LaunchAgents/com.sophia.assistant.plist` if you turned on start at login).
+
+### Manual install (for development)
+
+```bash
 git clone https://github.com/ds1734770-dot/Sophia.git
 cd Sophia
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
+scripts/setup_mac.sh            # macOS: environment, `sophia` command, first-run setup
 ```
 
-On first start Sophia asks for a Gemini API key (free at https://aistudio.google.com/apikey). For development you can put `GEMINI_API_KEY` in a `.env` file instead (see `.env.example`).
+On Windows: `python -m venv .venv`, `.venv\Scripts\activate`, `pip install -r requirements.txt`, `python main.py --setup`. For development you can put `GEMINI_API_KEY` in a `.env` file instead of the Keychain (see `.env.example`).
 
-```powershell
-python main.py              # the floating car (hover for Voice / Chat / Hide, Alt+S to hide)
-python main.py --chat       # classic chat window
-python main.py --cli        # text-only console
-python main.py --no-voice   # without microphone and speech
-```
+### Permissions (macOS)
 
-Press **Ctrl+Alt+Space** (or **Ctrl+Alt+S** / **Ctrl+Alt+J** if another program owns it) to start a voice request. Closing the chat keeps the car on screen.
+macOS asks once for each permission, for the app you start Sophia from (Terminal, iTerm, VS Code...). `sophia --setup` triggers every prompt and opens the right page of System Settings > Privacy & Security:
+
+| Permission | Needed for |
+| --- | --- |
+| Microphone | voice requests and the "Hey Jarvis" wake word |
+| Accessibility | clicking, typing, reading buttons and lists, window control, WhatsApp skills |
+| Screen & System Audio Recording | "what's on my screen", screenshots, window titles |
+| Automation (System Events) | volume, dark mode, Finder windows |
+
+Restart Sophia after allowing a permission. Windows needs none of these (only microphone access for desktop apps, in Settings > Privacy & security > Microphone).
+
+### macOS and Windows differences
+
+| Windows | macOS |
+| --- | --- |
+| Start Menu and registry apps | every `.app` in /Applications, the system apps and ~/Applications ("notepad" opens TextEdit, "task manager" Activity Monitor, "settings" System Settings) |
+| PowerShell | zsh, with its own refused list (sudo, `curl \| sh`, csrutil, diskutil erase, keychain reads...) and warnings (rm, mv, kill, defaults write, brew install...) |
+| Windows Search | Spotlight (`mdfind`) |
+| UI Automation | the Accessibility API |
+| Ctrl+Alt+Space / Alt+S / Ctrl+Alt+X | Ctrl+Option+Space / Ctrl+Option+H / Ctrl+Option+X (macOS refuses Option-only shortcuts) |
+| Ctrl+C, Alt+Tab... on the screen | sent as Cmd+C, Cmd+Tab... |
+| Windows voice (SAPI) fallback | the built-in `say` voice (Piper is the main voice on both) |
+| Start with Windows | Open at login (a LaunchAgent) |
+| Protected: Windows, Program Files, AppData | Protected: /System, /Library, /Applications, /usr, ~/Library (Google Drive, Dropbox and iCloud Drive folders inside ~/Library stay editable) |
 
 ## Voice
 
-- **Hands-free is on by default.** Say **"Hey Jarvis"** at any time while Sophia is running: with the car on screen it starts listening at once; with the car hidden (Alt+S) it drives out silently and listens. A spoken request gets a spoken reply. Turn it off in the chat menu (Hands-free).
+- **Hands-free is on by default.** Say **"Hey Jarvis"** at any time while Sophia is running: with the car on screen it starts listening at once; with the car hidden it drives out silently and listens. A spoken request gets a spoken reply. Turn it off in the chat menu (Hands-free).
 - **Speech recognition** runs on your PC with [faster-whisper](https://github.com/SYSTRAN/faster-whisper): audio never leaves the computer and uses no quota. The model (about 140 MB for `base.en`) downloads the first time. To improve accuracy it levels quiet microphone audio, adapts to the room's background noise, keeps the first words of your request after the wake word, tells Whisper which commands to expect, and discards noise it would otherwise turn into phrases like "thank you". On a test set of spoken commands in four accents with a quiet, noisy microphone this cut word errors from 16.8% to 12.5%. `WHISPER_MODEL=small.en` is slightly more accurate but about three times slower.
-- **The wake word keeps running:** the model runs on its own thread, the microphone is reopened automatically if it stops (sleep and wake, device changes), and errors are logged to `data/logs/sophia.log` instead of ending the listener.
-- **Spoken replies** use **Piper**, a natural neural voice that runs on your PC: offline, no account, no quota, and it starts talking after the first sentence (about half a second). The voice model (about 60 MB) downloads into `data/models/piper` the first time and loads in the background when Sophia starts; until it is ready the Windows voice covers. Choose the engine with `TTS_ENGINE` (`piper` default, `edge` for Microsoft's online voice, `windows` for the built-in one), the voice with `PIPER_VOICE` (for example `en_US-amy-medium`; list at huggingface.co/rhasspy/piper-voices) and the pace with `PIPER_SPEED` (1.2 is 20% faster). Download another voice with `python -m piper.download_voices en_US-amy-medium --download-dir data/models/piper`.
+- **The wake word keeps running:** the model runs on its own thread, the microphone is reopened automatically if it stops (sleep and wake, device changes), and errors are logged to `logs/sophia.log` in your data folder instead of ending the listener.
+- **Spoken replies** use **Piper**, a natural neural voice that runs on your computer: offline, no account, no quota, and it starts talking after the first sentence (about half a second). The voice model (about 60 MB) downloads into `data/models/piper` the first time and loads in the background when Sophia starts; until it is ready the Windows voice covers. Choose the engine with `TTS_ENGINE` (`piper` default, `edge` for Microsoft's online voice, `windows` for the built-in one), the voice with `PIPER_VOICE` (for example `en_US-amy-medium`; list at huggingface.co/rhasspy/piper-voices) and the pace with `PIPER_SPEED` (1.2 is 20% faster). Download another voice with `python -m piper.download_voices en_US-amy-medium --download-dir data/models/piper`.
 - The wake word model is [openwakeword](https://github.com/dscripka/openWakeWord) ("Hey Jarvis"); lower `WAKE_THRESHOLD` if it misses you. A custom "Hey Sophia" word needs a trained model.
 
 ## Gemini quota
@@ -190,25 +264,25 @@ Their tools appear as `mcp_<server>_<tool>` and ask for confirmation unless the 
 
 ## Configuration
 
-Environment variables or `.env`:
+Every setting is optional. Put them in a `.env` file in the Sophia folder (see `.env.example`) or set them as environment variables:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | (Credential Manager) | API key |
+| `GEMINI_API_KEY` | (Keychain / Credential Manager) | Gemini API key; `sophia --setup` stores it for you |
 | `MODEL_NAME` | `gemini-3.5-flash` | Main model |
 | `FALLBACK_MODELS` | `gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.1-flash-lite` | Used when the main model is out of quota |
 | `LIGHT_MODEL` | `gemini-3.1-flash-lite` | Memory extraction and summaries |
 | `REQUEST_TIMEOUT` | `30` | Seconds before a request is given up |
 | `THINKING_LEVEL` | `low` | How long Gemini thinks (`minimal`, `low`, `medium`, `high`; lower is faster) |
 | `WHISPER_MODEL` | `base.en` | Local speech model (`tiny.en` is smaller and faster) |
-| `TTS_ENGINE` | `piper` | Voice engine: `piper` (offline), `edge` (online) or `windows` |
+| `TTS_ENGINE` | `piper` | Voice engine: `piper` (offline), `edge` (online) or `windows` (the system voice: SAPI or macOS `say`) |
 | `PIPER_VOICE` | `en_GB-jenny_dioco-medium` | Offline voice (downloaded on first use) |
 | `PIPER_SPEED` | `1.0` | Speaking pace for Piper (1.2 = 20% faster) |
 | `TTS_VOICE` | `en-IN-NeerjaNeural` | Voice for the online `edge` engine |
-| `NEURAL_VOICE` | `true` | Set to `false` to always use the offline Windows voice |
+| `NEURAL_VOICE` | `true` | Set to `false` to always use the built-in system voice |
 | `WAKE_WORD` | `hey_jarvis` | Wake word model |
 | `WAKE_THRESHOLD` | `0.5` | Lower is more sensitive |
-| `HIDE_HOTKEY` | `alt+s` | Global shortcut that hides or shows the car |
+| `HIDE_HOTKEY` | `alt+s` (Mac: `ctrl+alt+h`) | Global shortcut that hides or shows the car (`alt` is Option and `win` is Cmd on a Mac) |
 | `STOP_HOTKEY` | `ctrl+alt+x` | Stops a screen task at once |
 | `SCREEN_AUTONOMY` | `auto` | `auto` works through a task without asking; `ask` confirms every click and keystroke |
 | `SCREEN_MAX_STEPS` / `SCREEN_MAX_SECONDS` | `25` / `180` | Limits for one screen task |
@@ -216,9 +290,11 @@ Environment variables or `.env`:
 | `CAR_WIDTH` | `130` | Width of the car in pixels (70 to 300) |
 | `SOUND_EFFECTS` | `true` | Turn the car's sound effects on or off |
 | `SOUND_VOLUME` | `0.6` | Sound effect volume (0 to 1) |
-| `SOPHIA_HOME` | `./data` | Where history, profile, notes and logs are kept |
+| `SITE_BROWSERS` | (empty) | Open some websites in a particular browser, e.g. `youtube:comet,github:chrome` (chrome, comet, edge, brave, firefox, arc, safari); the rest use your default browser |
+| `STT_ENGINE` | `moonshine` | Speech recognition: `moonshine` (fast) or `whisper` |
+| `SOPHIA_HOME` | `./data` (Mac: `~/Library/Application Support/Sophia`) | Where history, profile, notes and logs are kept |
 
-Your data (chat history, profile, notes, schedule, routines, logs) lives in `data/` and is git-ignored.
+Your data (chat history, profile, notes, schedule, routines, logs) stays on your computer, in `SOPHIA_HOME`. Only your messages (and screenshots, when you ask about the screen) are sent to Gemini; speech recognition and the voice run offline.
 
 ## Project layout
 
@@ -238,10 +314,13 @@ tests/        pytest suite (runs headless)
 
 ## Develop
 
-```powershell
-pip install -r requirements-dev.txt
-pytest
+```bash
+pip install -r requirements-dev.txt      # or: scripts/setup_mac.sh --no-setup
+QT_QPA_PLATFORM=offscreen pytest -q      # about 900 tests, headless, no API calls
+ruff check --select F app main.py tests
 ```
+
+Platform code lives behind small adapters: `app/computer/macos.py` and `app/computer/mac_accessibility.py` for macOS, the Win32 / UI Automation code next to them for Windows. CI runs the tests on both.
 
 ## Build a standalone app
 
@@ -259,4 +338,12 @@ This produces `dist\Sophia\Sophia.exe`. The packaged app keeps its data in `%APP
 - Several saved conversations with search
 - A custom "Hey Sophia" wake word
 - Email and calendar through a Google or Microsoft sign-in
-- macOS and Linux behind a platform adapter
+- Linux support
+
+## Contributing
+
+Issues and pull requests are welcome. Please run the tests on your platform before opening a pull request, and keep new tools behind the safety tiers described above.
+
+## License
+
+[MIT](LICENSE). Sophia uses Google Gemini through your own API key; you are responsible for your use of it under Google's terms.

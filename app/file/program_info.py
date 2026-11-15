@@ -5,9 +5,15 @@ signed, and was it downloaded from the internet?
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
+IS_MAC = sys.platform == "darwin"
+
 LAUNCHABLE = {".exe", ".lnk", ".msi", ".bat", ".cmd", ".com"}
+
+if IS_MAC:
+    LAUNCHABLE = {".app", ".pkg", ".mpkg", ".dmg"}
 
 # Never launched: scripts that run hidden code, registry files, libraries
 NEVER_LAUNCHED = {".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".reg", ".dll", ".scr", ".jar"}
@@ -16,8 +22,15 @@ NEVER_LAUNCHED = {".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".reg"
 def from_internet(path):
     """
     True if Windows marked the file as downloaded (the Zone.Identifier
-    stream), False if not, None if it cannot be checked.
+    stream), False if not, None if it cannot be checked. On macOS: the
+    quarantine flag.
     """
+
+    if IS_MAC:
+
+        from app.computer.macos import quarantined
+
+        return quarantined(path)
 
     try:
 
@@ -35,6 +48,12 @@ def signature(path, run=subprocess.run):
     """
     (status, publisher): status is "signed", "unsigned" or "unknown".
     """
+
+    if IS_MAC and run is subprocess.run:
+
+        from app.computer.macos import code_signature
+
+        return code_signature(path)
 
     script = (
         "$s = Get-AuthenticodeSignature -LiteralPath $args[0]; "

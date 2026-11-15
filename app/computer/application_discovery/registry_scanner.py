@@ -1,4 +1,7 @@
-import winreg
+try:
+    import winreg
+except ImportError:  # not on Windows
+    winreg = None
 
 from app.computer.application_discovery.executable_resolver import ExecutableResolver
 from app.computer.application_normalizer import ApplicationNormalizer
@@ -6,7 +9,7 @@ from app.computer.application_normalizer import ApplicationNormalizer
 
 class RegistryScanner:
 
-    UNINSTALL_KEYS = [
+    UNINSTALL_KEYS = [] if winreg is None else [
 
         (
             winreg.HKEY_LOCAL_MACHINE,
@@ -33,6 +36,9 @@ class RegistryScanner:
     def scan(self):
 
         applications = []
+
+        if winreg is None:
+            return applications
 
         for hive, path in self.UNINSTALL_KEYS:
 

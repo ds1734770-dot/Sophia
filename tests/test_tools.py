@@ -97,7 +97,8 @@ def test_drive_roots_cannot_be_changed(guard):
 
 def test_reasons_are_given(guard, tmp_path, home):
 
-    assert "Windows" in guard.why_not_write(tmp_path / "Windows" / "x")
+    reason = guard.why_not_write(tmp_path / "Windows" / "x")
+    assert "Windows" in reason or "macOS" in reason
     assert "credentials" in guard.why_not_write(home / ".ssh" / "id_rsa")
 
 

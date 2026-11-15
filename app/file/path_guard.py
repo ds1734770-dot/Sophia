@@ -10,24 +10,33 @@ in Windows itself, installed programs, AppData, or Sophia's own folder.
 """
 
 import os
+import sys
 from pathlib import Path
+
+IS_MAC = sys.platform == "darwin"
 
 # Files Sophia must never open: opening these runs code.
 EXECUTABLE_EXTENSIONS = {
     ".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".psm1", ".vbs",
     ".vbe", ".js", ".jse", ".wsf", ".scr", ".lnk", ".reg", ".dll", ".jar",
+    # macOS
+    ".app", ".command", ".sh", ".zsh", ".bash", ".tool", ".scpt",
+    ".applescript", ".workflow", ".pkg", ".mpkg", ".dylib", ".kext",
+    ".terminal", ".webloc", ".inetloc",
 }
 
 # Folder names that hold credentials
 SECRET_DIRS = {
     ".ssh", ".aws", ".gnupg", ".azure", ".kube", ".docker", "credentials",
-    "protect", "vault",
+    "protect", "vault", "keychains", "1password",
 }
 
 # File names and endings that are secrets
 SECRET_NAMES = {
     "id_rsa", "id_ed25519", "id_ecdsa", "login data", "cookies",
     "web data", "key3.db", "key4.db", "logins.json", "ntuser.dat",
+    "cookies.binarycookies", "login.keychain-db", ".netrc", ".zsh_history",
+    ".bash_history",
 }
 SECRET_SUFFIXES = {".pem", ".pfx", ".p12", ".key", ".kdbx", ".ppk"}
 
@@ -35,11 +44,21 @@ SECRET_SUFFIXES = {".pem", ".pfx", ".p12", ".key", ".kdbx", ".ppk"}
 JUNK_DIRS = {
     "node_modules", ".git", "__pycache__", "site-packages", ".venv", "venv",
     ".cache", "$recycle.bin", "system volume information", ".next",
-    ".gradle", ".idea", ".vscode", "dist", "build",
+    ".gradle", ".idea", ".vscode", "dist", "build", ".trash", ".spotlight-v100",
+    ".fseventsd",
 }
+
+# macOS: the system, installed apps and Unix tools
+MAC_SYSTEM_DIRS = [
+    "/System", "/Library", "/Applications", "/usr", "/bin", "/sbin",
+    "/private/etc", "/private/var/db", "/private/var/root", "/opt", "/cores",
+]
 
 
 def default_system_dirs():
+
+    if IS_MAC:
+        return [Path(d) for d in MAC_SYSTEM_DIRS]
 
     dirs = []
 
@@ -70,7 +89,18 @@ class PathGuard:
 
         # Never changed: AppData, plus anything passed in (Sophia's
         # own folder, so it cannot delete itself)
-        self.protected = [self.home / "AppData"] + [Path(p) for p in (protected or [])]
+        mac = IS_MAC and home is None
+
+        self._app_data = self.home / ("Library" if mac else "AppData")
+
+        self.protected = [self._app_data] + [Path(p) for p in (protected or [])]
+
+        # On macOS, Google Drive, Dropbox, OneDrive and iCloud Drive keep
+        # the user's own files inside ~/Library
+        self.user_files_in_app_data = [
+            self.home / "Library" / "CloudStorage",
+            self.home / "Library" / "Mobile Documents",
+        ] if mac else []
 
     # ------------------------------------------------
 
@@ -139,10 +169,19 @@ class PathGuard:
 
         for folder in self.system_dirs + self.protected:
 
-            if self._within(resolved, folder):
+            if self._within(resolved, folder) and not self._user_file(resolved, folder):
                 return None
 
         return resolved
+
+    def _user_file(self, resolved, folder):
+        """
+        True for cloud-drive files that only look like app data.
+        """
+
+        return folder == self._app_data and any(
+            self._within(resolved, f) for f in self.user_files_in_app_data
+        )
 
     def why_not_write(self, path):
         """
@@ -160,12 +199,18 @@ class PathGuard:
         for folder in self.system_dirs:
 
             if self._within(resolved, folder):
-                return "That is part of Windows or installed programs."
+                return (
+                    "That is part of macOS or installed apps." if IS_MAC
+                    else "That is part of Windows or installed programs."
+                )
 
         for folder in self.protected:
 
-            if self._within(resolved, folder):
-                return "That folder is protected (AppData or Sophia's own files)."
+            if self._within(resolved, folder) and not self._user_file(resolved, folder):
+                return (
+                    "That folder is protected (Library or Sophia's own files)." if IS_MAC
+                    else "That folder is protected (AppData or Sophia's own files)."
+                )
 
         return "That location is not allowed."
 

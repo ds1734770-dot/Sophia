@@ -8,7 +8,7 @@ from PySide6.QtGui import QColor, QImage, QPainter
 from app.ui.armor import ARMOR_H, ARMOR_W, ArmorModel
 from app.ui.car import CarModel
 from app.ui.characters import CHARACTERS, make_model, valid
-from app.ui.floating_car import CarController, FloatingCar, Layout
+from app.ui.floating_car import FloatingCar, Layout
 from tests.test_floating_car import FakeMouse, fresh_settings, make_pair, qapp
 from tests.test_ui import pump
 

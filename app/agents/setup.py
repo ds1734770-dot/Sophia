@@ -21,7 +21,8 @@ EVENTS = ("UserPromptSubmit", "Notification", "Stop")
 
 def _posix(path):
 
-    return Path(path).as_posix()
+    # also for Windows paths read on another system
+    return Path(path).as_posix().replace("\\", "/")
 
 
 def notify_script():

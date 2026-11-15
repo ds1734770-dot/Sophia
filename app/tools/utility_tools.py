@@ -13,6 +13,7 @@ import secrets
 import socket
 import string
 import subprocess
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -37,6 +38,10 @@ PROTECTED_PROCESSES = {
     "wininit.exe", "winlogon.exe", "services.exe", "lsass.exe", "svchost.exe",
     "dwm.exe", "explorer.exe", "fontdrvhost.exe", "sihost.exe", "taskhostw.exe",
     "ctfmon.exe", "msmpeng.exe", "securityhealthservice.exe", "memcompression",
+    # macOS
+    "kernel_task", "launchd", "windowserver", "loginwindow", "systemuiserver",
+    "dock", "finder", "coreaudiod", "mds", "mds_stores", "securityd", "opendirectoryd",
+    "controlcenter", "cfprefsd", "trustd", "syspolicyd", "tccd",
 }
 
 # Unzipping stops at this much data: a zip bomb must not fill the disk
@@ -491,7 +496,9 @@ def register_utility_tools(
             return False, "Which program?"
 
         if name.removesuffix(".exe") in {p.removesuffix(".exe") for p in PROTECTED_PROCESSES}:
-            return False, f"{name} is part of Windows; I won't end it."
+            system = "macOS" if sys.platform == "darwin" else "Windows"
+
+            return False, f"{name} is part of {system}; I won't end it."
 
         if process_source is not None:
             return False, "Process control is not available."
@@ -846,6 +853,20 @@ def register_utility_tools(
 
         value = 0 if mode == "dark" else 1
 
+        if sys.platform == "darwin":
+
+            try:
+
+                from app.computer.macos import set_dark_mode
+
+                set_dark_mode(mode == "dark")
+
+            except Exception as e:
+
+                return False, f"I couldn't change the theme: {e}"
+
+            return True, f"Your Mac is now in {mode} mode."
+
         try:
 
             import winreg
@@ -870,10 +891,10 @@ def register_utility_tools(
 
     registry.register(Tool(
         name="set_windows_theme",
-        description="Switch Windows between dark mode and light mode.",
+        description="Switch the computer (Windows or macOS) between dark mode and light mode.",
         parameters={"mode": {"type": "string", "enum": ["dark", "light"]}},
         required=["mode"],
         risk=Risk.CONFIRM,
-        preview=lambda a: f"Switch Windows to {a['mode']} mode.",
+        preview=lambda a: f"Switch {'your Mac' if sys.platform == 'darwin' else 'Windows'} to {a['mode']} mode.",
         handler=set_theme,
     ))

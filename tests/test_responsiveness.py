@@ -1,5 +1,3 @@
-import threading
-import time
 
 from app.context import system_profile as sp
 from app.memory.summarizer import Summarizer

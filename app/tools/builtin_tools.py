@@ -8,7 +8,7 @@ from datetime import datetime
 
 from app.brain.engines.calculator_engine import UnsafeExpression, safe_eval
 from app.memory.profile_storage import ProfileStorage
-from app.computer.shell_runner import ShellBlocked, classify
+from app.computer.shell_runner import SHELL_NAME, ShellBlocked, classify
 from app.file.path_guard import PathGuard
 from app.tools.file_tools import register_file_tools
 from app.tools.personal_tools import register_personal_tools
@@ -454,7 +454,7 @@ def build_default_registry(
         registry.register(Tool(
             name="run_powershell",
             description=(
-                "Run a PowerShell command on the user's PC and return "
+                f"Run a {SHELL_NAME} command on the user's computer and return "
                 "its output. Use it for things no other tool covers: "
                 "system information, installed programs, network checks, "
                 "processes, scripts. The user always sees the exact "
@@ -471,7 +471,7 @@ def build_default_registry(
             risk_fn=shell_risk,
             trustable=False,
             preview=lambda a: (
-                "I'm about to run this PowerShell command:\n\n"
+                f"I'm about to run this {SHELL_NAME} command:\n\n"
                 f"    {a['command']}"
             ),
             handler=lambda context, command, timeout_seconds=30: shell.run(

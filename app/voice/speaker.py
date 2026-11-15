@@ -1,12 +1,15 @@
 """
-Text-to-speech through the Windows speech engine (SAPI): offline, free,
-no AI quota.
+Text-to-speech through the system speech engine (Windows SAPI, or the
+macOS `say` command): offline, free, no AI quota.
 """
 
 import logging
 import queue
 import re
+import subprocess
+import sys
 import threading
+import time
 
 log = logging.getLogger("sophia.voice")
 
@@ -72,6 +75,57 @@ class SapiBackend:
         self.voice.Speak("", self.ASYNC | self.PURGE)
 
 
+class SayBackend:
+    """
+    macOS speech through the built-in `say` command.
+    """
+
+    def __init__(self, rate=0, voice=None):
+
+        # SAPI rate -10..10 around a normal pace; say counts words per minute
+        self.words_per_minute = 185 + int(rate) * 15
+        self.voice = voice
+        self._process = None
+
+    def start(self, text):
+
+        command = ["say", "-r", str(self.words_per_minute)]
+
+        if self.voice:
+            command += ["-v", self.voice]
+
+        self._process = subprocess.Popen(
+            command + ["--", text],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def done(self, timeout_ms):
+
+        if self._process is None:
+            return True
+
+        deadline = time.monotonic() + timeout_ms / 1000
+
+        while time.monotonic() < deadline:
+
+            if self._process.poll() is not None:
+                return True
+
+            time.sleep(0.02)
+
+        return self._process.poll() is not None
+
+    def purge(self):
+
+        if self._process is not None and self._process.poll() is None:
+            self._process.terminate()
+
+
+# The operating system's own voice (used when no neural voice is ready)
+SystemBackend = SayBackend if sys.platform == "darwin" else SapiBackend
+
+
 class Speaker:
 
     _STOP = object()
@@ -81,7 +135,7 @@ class Speaker:
 
         self.enabled = enabled
 
-        self._backend_factory = backend_factory or SapiBackend
+        self._backend_factory = backend_factory or SystemBackend
         self._queue = queue.Queue()
         self._interrupt = threading.Event()
         self._thread = None

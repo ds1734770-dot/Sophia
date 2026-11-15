@@ -11,12 +11,19 @@ def _data_dir():
     Next to the code while developing; in the APPDATA Sophia folder when
     installed (the install folder is not writable), or wherever
     SOPHIA_HOME says.
+
+    On macOS: ~/Library/Application Support/Sophia. The project folder
+    may be shared with a Windows PC (Google Drive), and the app index,
+    file index and logs of one computer are wrong on the other.
     """
 
     override = os.getenv("SOPHIA_HOME")
 
     if override:
         return Path(override)
+
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Sophia"
 
     if getattr(sys, "frozen", False):
         return Path(os.getenv("APPDATA") or Path.home()) / "Sophia"

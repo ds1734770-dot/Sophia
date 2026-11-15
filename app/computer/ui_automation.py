@@ -32,6 +32,10 @@ WEB_PROCESSES = {
     "chrome.exe", "msedge.exe", "comet.exe", "firefox.exe", "brave.exe", "opera.exe",
     "vivaldi.exe", "arc.exe", "whatsapp.exe", "whatsapp.root.exe", "teams.exe", "slack.exe",
     "discord.exe", "claude.exe", "code.exe",
+    # macOS app names
+    "google chrome", "comet", "safari", "firefox", "brave browser", "arc", "microsoft edge",
+    "opera", "vivaldi", "whatsapp", "slack", "discord", "claude", "code", "microsoft teams",
+    "chatgpt", "obsidian",
 }
 
 MAX_DEPTH = 16
@@ -69,6 +73,93 @@ def describe(element):
     note = "" if element.enabled else " [disabled]"
 
     return f'[{element.index}] {element.kind} "{label}"{note}'
+
+
+class FrontAppBackend:
+    """
+    macOS for now: knows which app is in front but lists no controls, so
+    the screen agent works from screenshots (look_at_screen and
+    click_on_screen) instead of numbered controls.
+    """
+
+    def window(self, title=None):
+
+        from app.computer.macos import clean_name, running_app_names
+
+        if title:
+
+            wanted = title.strip().lower()
+
+            for name in sorted(running_app_names(), key=len):
+
+                if wanted in name.lower() or name.lower() in wanted:
+                    return name
+
+            return None
+
+        try:
+
+            from AppKit import NSWorkspace
+
+            app = NSWorkspace.sharedWorkspace().frontmostApplication()
+
+            return clean_name(app.localizedName()) if app is not None else None
+
+        except Exception:
+            return None
+
+    def title(self, window):
+
+        return window or ""
+
+    def process_name(self, window):
+
+        return window or ""
+
+    def walk(self, window):
+
+        return []
+
+    def focused(self):
+
+        return None
+
+    def read_text(self, window, limit=3000):
+
+        return ""
+
+    def press(self, element):
+
+        return False
+
+    def set_value(self, element, text):
+
+        return False
+
+    def focus(self, element):
+
+        return False
+
+
+def default_backend():
+
+    import sys
+
+    if sys.platform == "win32":
+        return UiaBackend()
+
+    if sys.platform == "darwin":
+
+        try:
+
+            from app.computer.mac_accessibility import MacAxBackend
+
+            return MacAxBackend()
+
+        except ImportError:
+            log.warning("PyObjC is missing; screen controls are read from screenshots only")
+
+    return FrontAppBackend()
 
 
 class UiaBackend:
@@ -404,7 +495,7 @@ class ScreenElements:
     def backend(self):
 
         if self._backend is None:
-            self._backend = UiaBackend()
+            self._backend = default_backend()
 
         return self._backend
 

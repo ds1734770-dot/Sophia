@@ -12,7 +12,7 @@ charset-normalizer==3.5.2
 click==8.5.0
 cloudpickle==3.1.2
 colorama==0.4.6
-comtypes==1.4.17
+comtypes==1.4.17; sys_platform == "win32"
 courlan==1.4.0
 cryptography==49.0.0
 ctranslate2==4.8.2
@@ -83,7 +83,7 @@ python-dotenv==1.2.2
 python-multipart==0.0.32
 pytweening==1.2.0
 pytz==2026.5
-pywin32==312
+pywin32==312; sys_platform == "win32"
 PyYAML==6.0.3
 RapidFuzz==3.14.5
 referencing==0.37.0
@@ -111,8 +111,13 @@ typing-inspection==0.4.2
 typing_extensions==4.16.0
 tzdata==2026.5
 tzlocal==5.4.4
-uiautomation==2.0.29
+uiautomation==2.0.29; sys_platform == "win32"
 urllib3==2.8.0
 uvicorn==0.54.0
 websockets==16.1.1
 yarl==1.25.1
+piper-tts==1.8.0
+pyobjc-core==13.0; sys_platform == "darwin"
+pyobjc-framework-Cocoa==13.0; sys_platform == "darwin"
+pyobjc-framework-Quartz==13.0; sys_platform == "darwin"
+pyobjc-framework-ApplicationServices==13.0; sys_platform == "darwin"

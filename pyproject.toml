@@ -1,13 +1,16 @@
 [project]
 name = "sophia"
 version = "0.2.0"
-description = "A personal AI assistant for Windows: chat, voice, and computer control."
+description = "A personal AI assistant for Windows and macOS: chat, voice, and computer control."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "google-genai",
     "python-dotenv",
-    "pywin32",
+    "pywin32; sys_platform == 'win32'",
+    "uiautomation; sys_platform == 'win32'",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz; sys_platform == 'darwin'",
     "PySide6",
     "faster-whisper",
     "sounddevice",
@@ -24,8 +27,13 @@ dependencies = [
     "mcp",
     "edge-tts",
     "openwakeword",
+    "piper-tts",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# pytest fixtures imported from another test module look like redefinitions
+"tests/*" = ["F811"]

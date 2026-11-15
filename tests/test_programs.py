@@ -11,6 +11,11 @@ from app.file.search import FileSearch
 from app.tools.builtin_tools import build_default_registry
 from tests.test_tools import FakeBrowser, FakeComputer, FakePlanner
 
+import sys
+
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows behaviour")
+mac_only = pytest.mark.skipif(sys.platform != "darwin", reason="macOS behaviour")
+
 
 # ---------------------------------------------------------------
 # program_info
@@ -48,6 +53,7 @@ def test_description_mentions_downloads_and_missing_signatures():
     assert describe("x.exe", sig=lambda p: ("signed", "Valve"), internet=lambda p: False) == "signed by Valve"
 
 
+@windows_only
 def test_zone_identifier_detection(tmp_path):
 
     plain = tmp_path / "a.exe"
@@ -105,6 +111,7 @@ def launch(context, path, confirmed=False):
     return context.registry.execute("launch_program", {"path": str(path)}, context, confirmed=confirmed)
 
 
+@windows_only
 def test_launching_asks_first_and_shows_the_facts(env, monkeypatch):
 
     context, files, home = env
@@ -124,6 +131,7 @@ def test_launching_asks_first_and_shows_the_facts(env, monkeypatch):
     assert files.opened == []
 
 
+@windows_only
 def test_one_always_covers_launching_for_the_session(env):
 
     context, files, home = env
@@ -140,6 +148,7 @@ def test_one_always_covers_launching_for_the_session(env):
     assert result.ok and files.opened == [str(game.resolve())]
 
 
+@windows_only
 @pytest.mark.parametrize("name", ["setup.exe", "tool.lnk", "app.msi", "run.bat", "run.cmd"])
 def test_programs_can_be_launched(env, name):
 
@@ -218,3 +227,34 @@ def test_looking_at_the_screen_is_free_unless_the_user_wants_to_be_asked(tmp_pat
 
     assert result.needs_confirmation
     assert asked == ["what?"]
+
+
+@mac_only
+def test_mac_apps_and_installers_can_be_launched(env):
+
+    context, files, home = env
+
+    bundle = home / "Downloads" / "Tool.app"
+    (bundle / "Contents").mkdir(parents=True)
+
+    installer = home / "Downloads" / "setup.pkg"
+    installer.write_text("x")
+
+    assert launch(context, bundle, confirmed=True).ok
+    assert launch(context, installer, confirmed=True).ok
+    assert files.opened == [str(bundle.resolve()), str(installer.resolve())]
+
+
+@mac_only
+def test_mac_quarantine_flag_is_detected(tmp_path):
+
+    import subprocess
+
+    plain = tmp_path / "a.dmg"
+    plain.write_text("x")
+
+    assert from_internet(plain) is False
+
+    subprocess.run(["xattr", "-w", "com.apple.quarantine", "0081;0;Safari;", str(plain)], check=True)
+
+    assert from_internet(plain) is True

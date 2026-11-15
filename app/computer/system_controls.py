@@ -1,9 +1,10 @@
 """
-Volume, brightness, power and screenshots for Windows.
+Volume, brightness, power and screenshots (Windows and macOS).
 """
 
 import ctypes
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -31,7 +32,11 @@ POWER_DELAY_SECONDS = 30
 
 class SystemControls:
 
-    def __init__(self, press_key=None, run=None, grab=None, pictures_dir=None):
+    def __init__(self, press_key=None, run=None, grab=None, pictures_dir=None, mac=None):
+
+        # macOS uses AppleScript and system keys unless a test injects
+        # Windows-style key presses
+        self.mac = (sys.platform == "darwin" and press_key is None and run is None) if mac is None else mac
 
         self._press_key = press_key or self._windows_press_key
         self._run = run or subprocess.run
@@ -62,6 +67,17 @@ class SystemControls:
 
         steps = max(1, min(int(steps), 50))
 
+        if self.mac:
+
+            from app.computer import macos
+
+            if not macos.change_volume(direction, steps * VOLUME_STEP_PERCENT):
+                return False, "I couldn't change the volume."
+
+            return True, (
+                f"Volume {direction} by about {steps * VOLUME_STEP_PERCENT}%."
+            )
+
         code = VK_VOLUME_UP if direction == "up" else VK_VOLUME_DOWN
 
         for _ in range(steps):
@@ -79,6 +95,15 @@ class SystemControls:
 
         level = max(0, min(int(level), 100))
 
+        if self.mac:
+
+            from app.computer import macos
+
+            if not macos.set_volume(level):
+                return False, "I couldn't change the volume."
+
+            return True, f"Volume set to {level}%."
+
         for _ in range(50):
             self._press_key(VK_VOLUME_DOWN)
 
@@ -88,6 +113,14 @@ class SystemControls:
         return True, f"Volume set to about {level}%."
 
     def toggle_mute(self):
+
+        if self.mac:
+
+            from app.computer import macos
+
+            macos.toggle_mute()
+
+            return True, "Toggled mute."
 
         self._press_key(VK_VOLUME_MUTE)
 
@@ -100,6 +133,18 @@ class SystemControls:
         if code is None:
             return False, f"Unknown media action '{action}'."
 
+        if self.mac:
+
+            from app.computer import macos
+
+            try:
+                macos.press_system_key(macos.MEDIA_KEYS[action])
+
+            except Exception as e:
+                return False, f"I couldn't send the media key: {e}"
+
+            return True, f"Sent {action.replace('_', '/')} to the media player."
+
         self._press_key(code)
 
         return True, f"Sent {action.replace('_', '/')} to the media player."
@@ -111,6 +156,18 @@ class SystemControls:
     def set_brightness(self, level):
 
         level = max(0, min(int(level), 100))
+
+        if self.mac:
+
+            from app.computer import macos
+
+            try:
+                macos.set_brightness(level)
+
+            except Exception:
+                return False, "I couldn't change the brightness."
+
+            return True, f"Brightness set to about {level}%."
 
         script = (
             "(Get-WmiObject -Namespace root/WMI "
@@ -143,6 +200,9 @@ class SystemControls:
         sleep happens at once.
         """
 
+        if self.mac:
+            return self._mac_power(action)
+
         if action == "cancel":
 
             self._run(["shutdown", "/a"], capture_output=True, text=True)
@@ -171,6 +231,35 @@ class SystemControls:
                 capture_output=True,
                 text=True,
             )
+
+            return True, "Going to sleep..."
+
+        return False, f"Unknown power action '{action}'."
+
+    @staticmethod
+    def _mac_power(action):
+
+        from app.computer import macos
+
+        if action == "cancel":
+
+            if macos.POWER.cancel():
+                return True, "Cancelled the pending shutdown or restart."
+
+            return True, "There was no shutdown or restart waiting."
+
+        if action in ("shutdown", "restart"):
+
+            macos.POWER.schedule(action, POWER_DELAY_SECONDS)
+
+            return True, (
+                f"Your Mac will {action} in {POWER_DELAY_SECONDS} "
+                "seconds. Say 'cancel shutdown' to stop it."
+            )
+
+        if action == "sleep":
+
+            macos.sleep_now()
 
             return True, "Going to sleep..."
 

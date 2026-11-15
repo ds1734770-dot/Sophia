@@ -1,6 +1,6 @@
-import winreg
-
 import pytest
+
+winreg = pytest.importorskip("winreg")
 
 from app.computer.autostart import Autostart, default_command
 

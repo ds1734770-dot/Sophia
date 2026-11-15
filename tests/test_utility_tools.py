@@ -145,7 +145,7 @@ def test_ending_programs_always_asks_with_a_warning_and_spares_windows(tmp_path)
 
     for name in ("explorer.exe", "csrss", "svchost.exe"):
         refused = run(registry, "end_process", name=name)
-        assert not refused.ok and "Windows" in refused.message
+        assert not refused.ok and ("Windows" in refused.message or "macOS" in refused.message)
 
 
 def test_folder_sizes_ranks_biggest_first(tmp_path):

@@ -25,6 +25,7 @@ LAY = Layout(DEFAULT_WIDTH)
 from app.ui.hotkey import MOD_ALT, MOD_CONTROL, parse_hotkey
 from app.ui.main_window import MainWindow
 from tests.test_ui import (
+
     FakeAutostart,
     FakeRecorder,
     FakeSophia,
@@ -32,6 +33,11 @@ from tests.test_ui import (
     FakeTranscriber,
     pump,
 )
+
+import sys
+
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows behaviour")
+mac_only = pytest.mark.skipif(sys.platform != "darwin", reason="macOS behaviour")
 
 
 def qapp():
@@ -100,6 +106,7 @@ def hover(app, car, mouse):
         ("alt+7", (MOD_ALT, ord("7"), "Alt+7")),
     ],
 )
+@windows_only
 def test_shortcuts_are_parsed(text, expected):
 
     assert parse_hotkey(text) == expected
@@ -142,7 +149,7 @@ def test_the_car_is_kept_on_screen():
 
 def test_the_position_is_remembered_between_runs():
 
-    app = qapp()
+    qapp()
 
     settings = fresh_settings()
 
@@ -209,7 +216,7 @@ def test_dragging_moves_the_car_and_the_car_drives_while_moving():
 
 def test_dropping_remembers_where_and_parks_facing_the_middle():
 
-    app = qapp()
+    qapp()
 
     settings = fresh_settings()
     car = make_car(settings=settings)
@@ -317,7 +324,7 @@ def test_the_three_buttons_send_voice_chat_and_hide():
 
 def test_buttons_do_not_react_before_they_are_out():
 
-    app = qapp()
+    qapp()
 
     car = make_car(FakeMouse())
 
@@ -331,7 +338,7 @@ def test_buttons_do_not_react_before_they_are_out():
 
 def test_the_voice_button_shows_when_listening():
 
-    app = qapp()
+    qapp()
 
     car = make_car()
 
@@ -462,7 +469,7 @@ def test_exit_revs_then_drives_away_and_calls_done():
 
 def test_dragging_is_ignored_while_the_car_is_driving():
 
-    app = qapp()
+    qapp()
 
     car = make_car()
 
@@ -769,7 +776,7 @@ def test_buttons_fit_inside_the_window_at_every_size():
 
 def test_resizing_keeps_the_centre_remembers_and_updates_the_layout():
 
-    app = qapp()
+    qapp()
 
     settings = fresh_settings()
     car = make_car(settings=settings)
@@ -897,7 +904,7 @@ def test_buttons_click_and_hiding_and_exiting_have_sounds():
 
 def test_listening_and_thinking_and_success_have_sounds():
 
-    app = qapp()
+    qapp()
 
     car, sounds = make_car_with_sounds()
 
@@ -913,7 +920,7 @@ def test_listening_and_thinking_and_success_have_sounds():
 
 def test_the_sound_switch_in_the_menu_mutes_and_is_remembered():
 
-    app = qapp()
+    qapp()
 
     settings = fresh_settings()
     sounds = FakeSounds()
@@ -950,3 +957,15 @@ def test_a_broken_sound_device_never_breaks_the_car():
     car.enter()
 
     assert pump(app, lambda: not car.driving, seconds=4)
+
+
+@mac_only
+def test_mac_shortcuts_are_parsed():
+
+    from app.ui import mac_hotkey
+
+    assert parse_hotkey("ctrl+alt+h") == (
+        mac_hotkey.CONTROL_KEY | mac_hotkey.OPTION_KEY, mac_hotkey.KEY_CODES["h"], "Ctrl+Option+H"
+    )
+    assert parse_hotkey("cmd+shift+space")[2] == "Cmd+Shift+SPACE"
+    assert parse_hotkey("alt+f13") is None

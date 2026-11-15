@@ -10,7 +10,10 @@ import csv
 import io
 import os
 import subprocess
+import sys
 import time
+
+IS_MAC = sys.platform == "darwin"
 
 try:
     import win32con
@@ -34,8 +37,15 @@ class WindowManager:
 
     def running_processes(self):
         """
-        Names of running programs, e.g. {"chrome.exe", "Code.exe"}.
+        Names of running programs, e.g. {"chrome.exe", "Code.exe"}
+        (on macOS app names such as "Safari", plus process names).
         """
+
+        if IS_MAC and self.run is subprocess.run:
+
+            from app.computer.macos import running_process_names
+
+            return running_process_names()
 
         result = self.run(
             ["tasklist", "/FO", "CSV", "/NH"],
@@ -91,6 +101,26 @@ class WindowManager:
 
         if not self.is_running(process_name):
             return False, f"{process_name} isn't running."
+
+        if IS_MAC and self.run is subprocess.run:
+
+            from app.computer.macos import quit_app
+
+            quit_app(process_name, force=force)
+
+            deadline = time.time() + wait_seconds
+
+            while time.time() < deadline:
+
+                if not self.is_running(process_name):
+                    return True, f"Closed {process_name}."
+
+                time.sleep(0.3)
+
+            return False, (
+                f"{process_name} is still open; it may be asking to "
+                "save work. Say 'force close' if you want to end it anyway."
+            )
 
         command = ["taskkill", "/IM", process_name]
 
@@ -156,6 +186,12 @@ class WindowManager:
         if action not in self.ACTIONS:
             return False, f"Unknown window action '{action}'."
 
+        if IS_MAC:
+
+            from app.computer.macos import window_action
+
+            return window_action(text, action)
+
         windows = self.find_windows(text)
 
         if not windows:
@@ -202,6 +238,7 @@ def process_name_for(application):
     exe = application.get("exe")
 
     if exe:
-        return os.path.basename(exe)
+        # Windows paths keep their backslashes when read on a Mac
+        return os.path.basename(exe.replace("\\", "/"))
 
     return None

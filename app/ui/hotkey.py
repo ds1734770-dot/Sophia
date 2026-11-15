@@ -5,6 +5,7 @@ is hidden. Uses the Win32 RegisterHotKey call.
 
 import ctypes
 import logging
+import sys
 from ctypes import wintypes
 
 from PySide6.QtCore import QAbstractNativeEventFilter
@@ -135,3 +136,9 @@ class HotkeyFilter(QAbstractNativeEventFilter):
                 return True, 0
 
         return False, 0
+
+
+# macOS: Carbon hotkeys with the same interface
+if sys.platform == "darwin":
+    from app.ui.mac_hotkey import MacHotkeyFilter as HotkeyFilter  # noqa: F401,F811
+    from app.ui.mac_hotkey import parse_hotkey  # noqa: F401,F811

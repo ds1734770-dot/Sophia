@@ -46,7 +46,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui import theme
-from app.ui.car import CANVAS_W, STATES, CarModel, draw_car
+from app.ui.car import CANVAS_W, STATES
 from app.ui.characters import CHARACTERS, make_model, valid
 
 log = logging.getLogger("sophia.ui")

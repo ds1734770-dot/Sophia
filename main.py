@@ -1,3 +1,17 @@
+"""
+Sophia, a personal AI assistant for macOS and Windows.
+
+Usage:
+  sophia                 the floating car (hover for Voice / Chat / Hide)
+  sophia --chat          the chat window instead of the car
+  sophia --cli           text-only, in the terminal
+  sophia --no-voice      no microphone or spoken replies
+  sophia --minimized     start hidden (used when starting at login)
+  sophia --setup         first-run setup: API key, app scan, permissions,
+                         voice models (add --yes to accept the defaults,
+                         --skip-models to download them later)
+"""
+
 import sys
 
 from app.logging_setup import setup_logging
@@ -20,6 +34,14 @@ def run_cli():
 
 
 def main():
+
+    if "--help" in sys.argv or "-h" in sys.argv:
+        print(__doc__.strip())
+        return
+
+    if "--setup" in sys.argv:
+        from app.setup_wizard import run
+        sys.exit(run())
 
     if "--cli" in sys.argv:
         run_cli()

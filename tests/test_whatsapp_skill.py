@@ -1,4 +1,3 @@
-import pytest
 
 from app.agent.control import AgentControl
 from app.agent.guard import ScreenGuard

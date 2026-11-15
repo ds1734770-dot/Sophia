@@ -35,7 +35,8 @@ def default_system_info():
         "uptime_hours": round((time.time() - psutil.boot_time()) / 3600, 1),
     }
 
-    drive = os.path.splitdrive(os.path.expanduser("~"))[0] + "\\"
+    # the drive that holds the home folder (C:\ on Windows, / on a Mac)
+    drive = os.path.splitdrive(os.path.expanduser("~"))[0] + os.sep
     usage = shutil.disk_usage(drive)
 
     info["disk"] = {
@@ -76,6 +77,14 @@ def default_system_info():
 
 def default_clipboard():
 
+    import sys
+
+    if sys.platform == "darwin":
+
+        from app.computer.macos import Clipboard
+
+        return Clipboard()
+
     import win32clipboard
 
     class Clipboard:
@@ -111,7 +120,9 @@ def default_clipboard():
 
 def default_launch(uri):
 
-    os.startfile(uri)
+    from app.computer.macos import open_path
+
+    open_path(uri)
 
 
 # ---------------------------------------------------------------

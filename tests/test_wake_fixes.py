@@ -7,7 +7,7 @@ import pytest
 
 from app.voice.wakeword import WakeWordListener, wake_decision
 from tests.test_ui import FakeRecorder, FakeSophia, FakeTranscriber, make_window, pump
-from tests.test_ui import qapp  # noqa: F401  (the session fixture)
+from tests.test_ui import qapp  # noqa: F401,F811  (the session fixture)
 
 
 # ---------------------------------------------------------------

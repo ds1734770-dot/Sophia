@@ -1,5 +1,4 @@
 from send2trash import send2trash
-import os
 import shutil
 from pathlib import Path
 
@@ -145,7 +144,9 @@ class FileManager:
             if not path.exists():
                 return False, "File not found."
 
-            os.startfile(path)
+            from app.computer.macos import open_path
+
+            open_path(path)
 
             return True, f"Opening '{path.name}'..."
 

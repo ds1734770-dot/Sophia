@@ -18,6 +18,11 @@ from app.memory.user_profile import UserProfile
 from app.tools.builtin_tools import build_default_registry
 from app.tools.registry import Risk
 
+import sys
+
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows behaviour")
+mac_only = pytest.mark.skipif(sys.platform != "darwin", reason="macOS behaviour")
+
 
 # ---------------------------------------------------------------
 # WindowManager
@@ -129,11 +134,13 @@ def make_computer(app=None):
     return computer
 
 
+@windows_only
 def test_known_apps_resolve_without_searching():
 
     assert make_computer().resolve_process("VS Code") == "Code.exe"
 
 
+@windows_only
 def test_discovered_apps_resolve_through_their_exe():
 
     computer = make_computer({"name": "Spotify", "exe": r"C:\a\Spotify.exe"})
@@ -427,6 +434,7 @@ def test_guess_process_matches_running_programs():
     assert manager.guess_process("nothing") is None
 
 
+@windows_only
 def test_builtin_calculator_closes_the_real_process():
 
     from app.computer.builtin_apps import builtin_applications

@@ -12,13 +12,13 @@ class StartMenuScanner:
 
         self.search_locations = [
 
-            Path(os.environ["APPDATA"])
+            Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
             / "Microsoft"
             / "Windows"
             / "Start Menu"
             / "Programs",
 
-            Path(os.environ["ProgramData"])
+            Path(os.environ.get("ProgramData", "C:/ProgramData"))
             / "Microsoft"
             / "Windows"
             / "Start Menu"

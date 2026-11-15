@@ -25,6 +25,10 @@ SYSTEM_PROCESSES = {
     "systemsettings.exe", "securityhealthui.exe", "securityhealthsystray.exe", "consent.exe",
     "mmc.exe", "regedit.exe", "control.exe", "msconfig.exe", "gpedit.msc", "secpol.msc",
     "taskmgr.exe", "windowsdefender.exe", "wf.msc",
+    # macOS (process names are app names)
+    "system settings", "system preferences", "keychain access", "passwords",
+    "activity monitor", "securityagent", "coreservicesuiagent", "screen time",
+    "disk utility", "directory utility", "migration assistant", "boot camp assistant",
 }
 
 SYSTEM_TITLES = (
@@ -64,7 +68,7 @@ class ScreenGuard:
         if process in SYSTEM_PROCESSES or any(w in text for w in SYSTEM_TITLES) or (
             text == "settings" or text.startswith("settings -")
         ):
-            return False, "That is a Windows settings or security window, which I never change."
+            return False, "That is a system settings or security window, which I never change."
 
         if any(w in text for w in PASSWORD_MANAGER_WORDS):
             return False, "That is a password manager, which I never touch."

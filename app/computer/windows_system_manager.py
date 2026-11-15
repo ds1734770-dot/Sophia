@@ -1,7 +1,15 @@
-import winreg
 import os
 
+try:
+    import winreg
+except ImportError:  # not on Windows
+    winreg = None
+
+
 class WindowsSystemManager:
+    """
+    Where the everyday folders are (Desktop, Documents, Downloads).
+    """
 
     def __init__(self):
 
@@ -16,6 +24,12 @@ class WindowsSystemManager:
     def get_folder(self, name):
 
         name = name.lower()
+
+        if winreg is None:
+
+            from app.computer.macos import get_folder
+
+            return get_folder(name)
 
         if name not in self._folder_map:
             return None

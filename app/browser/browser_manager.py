@@ -1,3 +1,4 @@
+import os
 import subprocess
 import webbrowser
 from urllib.parse import quote
@@ -49,10 +50,18 @@ class BrowserManager:
         browser = BrowserPreferences.browser_for(website)
         browser_path = BrowserPreferences.browser_path(browser)
 
+        # a preferred browser that is not installed on this computer:
+        # use the default one instead of failing
+        if browser_path is not None and not os.path.exists(browser_path):
+            browser_path = None
+
         try:
 
             if browser_path is None:
                 webbrowser.open(url)
+
+            elif browser_path.endswith(".app"):
+                subprocess.Popen(["open", "-a", browser_path, url])
 
             else:
                 subprocess.Popen([

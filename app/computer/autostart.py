@@ -1,11 +1,15 @@
 """
-Start Sophia when the user signs in to Windows (per-user Run key; no
-administrator rights needed).
+Start Sophia when the user signs in (Windows: per-user Run key; macOS:
+a LaunchAgent). No administrator rights needed.
 """
 
 import sys
-import winreg
 from pathlib import Path
+
+try:
+    import winreg
+except ImportError:  # not on Windows
+    winreg = None
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "Sophia"
@@ -30,6 +34,20 @@ def default_command():
     main = Path(__file__).resolve().parents[2] / "main.py"
 
     return f'"{python}" "{main}" --minimized'
+
+
+def default_autostart():
+    """
+    The start-at-sign-in switch for this operating system.
+    """
+
+    if winreg is None:
+
+        from app.computer.macos import LaunchAgentAutostart
+
+        return LaunchAgentAutostart()
+
+    return Autostart()
 
 
 class Autostart:

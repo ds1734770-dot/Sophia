@@ -406,7 +406,10 @@ def register_file_tools(registry, files, search, guard, undo=None, program_info=
 
         target = guard.for_read(path)
 
-        if target is None or not target.is_file():
+        # macOS apps are folders that end in .app
+        is_bundle = target is not None and target.suffix.lower() == ".app" and target.is_dir()
+
+        if target is None or not (target.is_file() or is_bundle):
             return False, "That program does not exist or is not readable."
 
         suffix = target.suffix.lower()
@@ -425,8 +428,8 @@ def register_file_tools(registry, files, search, guard, undo=None, program_info=
     registry.register(Tool(
         name="launch_program",
         description=(
-            "Launch a program (.exe, .lnk shortcut, .msi installer, "
-            ".bat or .cmd) from its full path, for example one found "
+            "Launch a program (Windows: .exe, .lnk shortcut, .msi installer, "
+            ".bat or .cmd; macOS: .app, .pkg or .dmg) from its full path, for example one found "
             "with find_files in Downloads. For installed apps by name "
             "use open_application instead."
         ),

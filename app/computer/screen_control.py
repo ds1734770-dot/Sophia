@@ -8,16 +8,54 @@ element is. The "hands" are pyautogui.
 
 import json
 import logging
+import sys
 import time
 
 log = logging.getLogger("sophia.screen")
+
+IS_MAC = sys.platform == "darwin"
 
 # keys and combinations that must never be sent
 BLOCKED_COMBOS = {
     ("ctrl", "alt", "delete"),
     ("ctrl", "shift", "esc"),
     ("win", "l"),
+    # macOS: Force Quit window and lock screen
+    ("command", "option", "esc"),
+    ("command", "option", "escape"),
+    ("ctrl", "command", "q"),
 }
+
+# Windows shortcuts that are different on a Mac
+MAC_COMBOS = {
+    ("ctrl", "tab"): ("ctrl", "tab"),
+    ("ctrl", "shift", "tab"): ("ctrl", "shift", "tab"),
+    ("ctrl", "y"): ("command", "shift", "z"),
+    ("alt", "tab"): ("command", "tab"),
+    ("alt", "left"): ("command", "["),
+    ("alt", "right"): ("command", "]"),
+    ("alt", "f4"): ("command", "q"),
+    ("win", "d"): ("fn", "f11"),
+    ("ctrl", "l"): ("command", "l"),
+}
+
+MAC_MODIFIERS = {"ctrl": "command", "control": "command", "win": "command", "alt": "option", "cmd": "command"}
+
+
+def mac_keys(keys):
+    """
+    A Windows key combination as the Mac one ("ctrl+c" -> cmd+c).
+    """
+
+    keys = tuple(k.lower() for k in keys)
+
+    if keys in MAC_COMBOS:
+        return MAC_COMBOS[keys]
+
+    if len(keys) == 1:
+        return keys
+
+    return tuple(MAC_MODIFIERS.get(k, k) for k in keys)
 
 MAX_TYPED_CHARS = 2000
 CLICK_PAUSE = 0.25
@@ -87,11 +125,16 @@ class PyAutoGuiBackend:
 
     def hotkey(self, *keys):
 
+        if IS_MAC:
+            keys = mac_keys(keys)
+
         self.gui.hotkey(*keys)
 
     def press(self, key):
 
         self.gui.press(key)
+
+    scroll_step = 3 if IS_MAC else 120
 
     def scroll(self, amount):
 
@@ -196,7 +239,7 @@ class ScreenControl:
         if not parts or len(parts) > 4:
             return False, "Give 1 to 4 keys joined with +, like ctrl+c."
 
-        if parts in BLOCKED_COMBOS:
+        if parts in BLOCKED_COMBOS or (IS_MAC and mac_keys(parts) in BLOCKED_COMBOS):
             return False, "I won't send that key combination."
 
         if len(parts) == 1:
@@ -211,6 +254,9 @@ class ScreenControl:
 
         amount = max(1, min(int(amount), 30))
 
-        self.backend.scroll(amount * 120 if direction == "up" else -amount * 120)
+        # Windows counts wheel notches in 120ths; macOS counts lines
+        step = getattr(self.backend, "scroll_step", 120)
+
+        self.backend.scroll(amount * step if direction == "up" else -amount * step)
 
         return True, f"Scrolled {direction}."
