@@ -16,7 +16,7 @@ CHARACTERS = {
         "mini": (110, 40),      # chat header
     },
     "armor": {
-        "label": "Iron Man armor",
+        "label": "Armored suit",
         "model": ArmorModel,
         "hero": (112, 122),
         "mini": (38, 42),
