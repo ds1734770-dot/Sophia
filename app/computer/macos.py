@@ -12,6 +12,7 @@ permission for the program that runs Sophia (Terminal, VS Code...).
 import logging
 import os
 import plistlib
+import posixpath
 import subprocess
 import sys
 import threading
@@ -811,7 +812,8 @@ class LaunchAgentAutostart:
             "Label": self.label,
             "ProgramArguments": [str(a) for a in self.arguments],
             "RunAtLoad": True,
-            "WorkingDirectory": str(Path(self.arguments[1]).parent),
+            # a macOS path, whatever system builds it
+            "WorkingDirectory": posixpath.dirname(str(self.arguments[1])),
             "ProcessType": "Interactive",
         }
 
