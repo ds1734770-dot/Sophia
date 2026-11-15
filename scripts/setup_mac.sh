@@ -63,10 +63,11 @@ fi
 echo
 echo "Installed. The 'sophia' command works in new Terminal windows."
 
-if [[ "$1" != "--no-setup" ]]; then
+if [[ "$1" != "--no-setup" && "${SOPHIA_SKIP_SETUP:-0}" != "1" ]]; then
 
-    # under `curl | bash` the keyboard is not standard input: ask through the terminal
-    if [ -r /dev/tty ]; then
+    # under `curl | bash` the keyboard is not standard input: ask through
+    # the terminal when there is one
+    if (exec < /dev/tty) 2>/dev/null; then
         "$VENV/bin/python" "$ROOT/main.py" --setup < /dev/tty
     else
         "$VENV/bin/python" "$ROOT/main.py" --setup --yes
