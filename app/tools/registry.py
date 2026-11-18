@@ -7,13 +7,21 @@ or a local command triggers it) goes through ToolRegistry.execute, so a
 risky action can never skip its confirmation step.
 """
 
+from __future__ import annotations
+
 import itertools
 import logging
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING, cast
 
 from google.genai import types
+
+if TYPE_CHECKING:
+    from app.actions.pending_action_manager import PendingActionManager
+    from app.brain.tool_context import ToolContext
 
 log = logging.getLogger("sophia.tools")
 
@@ -40,22 +48,22 @@ class ToolBlocked(Exception):
 class Tool:
     name: str
     description: str
-    handler: object
-    parameters: dict = field(default_factory=dict)
-    required: list = field(default_factory=list)
+    handler: Callable[..., object]
+    parameters: dict[str, object] = field(default_factory=dict)
+    required: list[str] = field(default_factory=list)
     risk: Risk = Risk.SAFE
 
     # Builds the sentence shown when confirmation is needed
-    preview: object = None
+    preview: Callable[[dict[str, object]], str] | None = None
 
     # Optional: decides the tier from the arguments (may raise
     # ToolBlocked). Overrides `risk`.
-    risk_fn: object = None
+    risk_fn: Callable[[dict[str, object]], Risk] | None = None
 
     # May the user answer "always" so it stops asking this session?
     trustable: bool = True
 
-    def declaration(self):
+    def declaration(self) -> types.FunctionDeclaration:
 
         schema = {
             "type": "object",
@@ -69,7 +77,7 @@ class Tool:
             parameters_json_schema=schema,
         )
 
-    def describe(self, args):
+    def describe(self, args: dict[str, object]) -> str:
 
         if self.preview is not None:
             return self.preview(args)
@@ -103,12 +111,12 @@ PARALLEL_SAFE = frozenset({
 
 class ToolRegistry:
 
-    def __init__(self, audit=None):
+    def __init__(self, audit: Callable[[str, dict[str, object], ToolResult, bool], None] | None = None) -> None:
 
-        self.tools = {}
+        self.tools: dict[str, Tool] = {}
 
         # Tools the user said "always" to, for this session only
-        self.trusted = set()
+        self.trusted: set[str] = set()
 
         # Optional callable(name, args, result, confirmed) for the log
         self.audit = audit
@@ -117,16 +125,16 @@ class ToolRegistry:
         # in the interface: observer(event) with a dict holding phase
         # ("start" or "end"), token, name, args and, at the end, ok,
         # message and seconds.
-        self.observers = []
+        self.observers: list[Callable[[dict[str, object]], None]] = []
         self._tokens = itertools.count(1)
 
     # ------------------------------------------------
 
-    def register(self, tool):
+    def register(self, tool: Tool) -> None:
 
         self.tools[tool.name] = tool
 
-    def _notify(self, event):
+    def _notify(self, event: dict[str, object]) -> None:
 
         for observer in list(self.observers):
 
@@ -136,16 +144,16 @@ class ToolRegistry:
             except Exception:
                 log.debug("Tool observer failed", exc_info=True)
 
-    def names(self):
+    def names(self) -> list[str]:
 
         return list(self.tools)
 
-    def declarations(self):
+    def declarations(self) -> list[types.FunctionDeclaration]:
 
         # a copy: integrations may add tools while a request is built
         return [tool.declaration() for tool in list(self.tools.values())]
 
-    def is_safe(self, name, args=None):
+    def is_safe(self, name: str, args: Mapping[str, object] | None = None) -> bool:
         """
         Is this a read-only lookup that may run alongside others?
         """
@@ -159,7 +167,7 @@ class ToolRegistry:
             and tool.risk_fn is None
         )
 
-    def safe_only(self):
+    def safe_only(self) -> ToolRegistry:
         """
         A registry with just the SAFE-tier tools, for background work
         (routines) that must never ask or change anything.
@@ -174,7 +182,7 @@ class ToolRegistry:
 
         return view
 
-    def trust(self, name):
+    def trust(self, name: str) -> bool:
         """
         Stop asking for this tool for the rest of the session. Only
         CONFIRM-tier tools marked trustable can be trusted; dangerous
@@ -192,7 +200,9 @@ class ToolRegistry:
 
     # ------------------------------------------------
 
-    def execute(self, name, args, context, confirmed=False):
+    def execute(
+        self, name: str, args: Mapping[str, object] | None, context: ToolContext, confirmed: bool = False
+    ) -> ToolResult:
         """
         Run a tool. Tools above the SAFE tier are held back as a pending
         confirmation unless `confirmed` is True (or the user trusted the
@@ -282,7 +292,7 @@ class ToolRegistry:
 
         return result
 
-    def _finish(self, token, name, args, result, started):
+    def _finish(self, token: int, name: str, args: dict[str, object], result: ToolResult, started: float) -> None:
 
         self._notify({
             "phase": "end", "token": token, "name": name, "args": args,
@@ -292,7 +302,7 @@ class ToolRegistry:
 
     # ------------------------------------------------
 
-    def _audit(self, name, args, result, confirmed):
+    def _audit(self, name: str, args: dict[str, object], result: ToolResult, confirmed: bool) -> None:
 
         if self.audit is None:
             return
@@ -303,14 +313,16 @@ class ToolRegistry:
         except Exception:
             log.exception("Audit log failed")
 
-    def _ask_confirmation(self, tool, risk, args, context):
+    def _ask_confirmation(self, tool: Tool, risk: Risk, args: dict[str, object], context: ToolContext) -> ToolResult:
 
         prompt = tool.describe(args)
 
         if risk is Risk.DANGEROUS:
             prompt = f"Warning: {prompt}"
 
-        context.pending_actions.start(
+        # The interactive context installs a manager before running tools that can ask for confirmation.
+        pending_actions = cast("PendingActionManager", context.pending_actions)
+        pending_actions.start(
             action="confirm",
             matches=[],
             data={
@@ -327,7 +339,7 @@ class ToolRegistry:
         options = (
             "Reply 'yes' to confirm, 'always' to stop asking for this "
             "kind of action this session, or 'no' to cancel."
-            if context.pending_actions.current().data["always"]
+            if pending_actions.current().data["always"]
             else "Reply 'yes' to confirm or 'no' to cancel."
         )
 
