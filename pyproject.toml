@@ -100,6 +100,7 @@ files = [
     "app/computer/shell_runner.py",
     "app/agent/guard.py",
     "app/tools/plugins.py",
+    "app/tools/registry.py",
 ]
 ignore_missing_imports = true
 follow_imports = "silent"
@@ -114,5 +115,5 @@ omit = ["app/ui/*"]
 skip_covered = true
 
 [[tool.mypy.overrides]]
-module = ["app.file.path_guard", "app.computer.shell_runner", "app.agent.guard", "app.tools.plugins"]
+module = ["app.file.path_guard", "app.computer.shell_runner", "app.agent.guard", "app.tools.plugins", "app.tools.registry"]
 disallow_untyped_defs = true
